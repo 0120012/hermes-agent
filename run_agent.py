@@ -3041,6 +3041,7 @@ class AIAgent:
         #   7. Platform-specific formatting hint
 
         # Try SOUL.md as primary identity (unless context files are skipped)
+        prompt_parts: list[str] = [DEFAULT_AGENT_IDENTITY]
         _soul_loaded = False
         if not self.skip_context_files:
             _soul_content = load_soul_md()
