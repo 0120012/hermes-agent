@@ -1765,90 +1765,6 @@ def _clean_discord_user_ids(raw: str) -> list:
     return cleaned
 
 
-def _setup_matrix():
-    """Configure Matrix credentials."""
-    print_header("Matrix")
-    existing = get_env_value("MATRIX_ACCESS_TOKEN") or get_env_value("MATRIX_PASSWORD")
-    if existing:
-        print_info("Matrix: already configured")
-        if not prompt_yes_no("Reconfigure Matrix?", False):
-            return
-
-    print_info("Works with any Matrix homeserver (Synapse, Conduit, Dendrite, or matrix.org).")
-    print_info("   1. Create a bot user on your homeserver, or use your own account")
-    print_info("   2. Get an access token from Element, or provide user ID + password")
-    print()
-    homeserver = prompt("Homeserver URL (e.g. https://matrix.example.org)")
-    if homeserver:
-        save_env_value("MATRIX_HOMESERVER", homeserver.rstrip("/"))
-
-    print()
-    print_info("Auth: provide an access token (recommended), or user ID + password.")
-    token = prompt("Access token (leave empty for password login)", password=True)
-    if token:
-        save_env_value("MATRIX_ACCESS_TOKEN", token)
-        user_id = prompt("User ID (@bot:server — optional, will be auto-detected)")
-        if user_id:
-            save_env_value("MATRIX_USER_ID", user_id)
-        print_success("Matrix access token saved")
-    else:
-        user_id = prompt("User ID (@bot:server)")
-        if user_id:
-            save_env_value("MATRIX_USER_ID", user_id)
-        password = prompt("Password", password=True)
-        if password:
-            save_env_value("MATRIX_PASSWORD", password)
-            print_success("Matrix credentials saved")
-
-    if token or get_env_value("MATRIX_PASSWORD"):
-        print()
-        want_e2ee = prompt_yes_no("Enable end-to-end encryption (E2EE)?", False)
-        if want_e2ee:
-            save_env_value("MATRIX_ENCRYPTION", "true")
-            print_success("E2EE enabled")
-
-        matrix_pkg = "mautrix[encryption]" if want_e2ee else "mautrix"
-        try:
-            __import__("mautrix")
-        except ImportError:
-            print_info(f"Installing {matrix_pkg}...")
-            import subprocess
-            uv_bin = shutil.which("uv")
-            if uv_bin:
-                result = subprocess.run(
-                    [uv_bin, "pip", "install", "--python", sys.executable, matrix_pkg],
-                    capture_output=True, text=True,
-                )
-            else:
-                result = subprocess.run(
-                    [sys.executable, "-m", "pip", "install", matrix_pkg],
-                    capture_output=True, text=True,
-                )
-            if result.returncode == 0:
-                print_success(f"{matrix_pkg} installed")
-            else:
-                print_warning(f"Install failed — run manually: pip install '{matrix_pkg}'")
-                if result.stderr:
-                    print_info(f"  Error: {result.stderr.strip().splitlines()[-1]}")
-
-        print()
-        print_info("🔒 Security: Restrict who can use your bot")
-        print_info("   Matrix user IDs look like @username:server")
-        print()
-        allowed_users = prompt("Allowed user IDs (comma-separated, leave empty for open access)")
-        if allowed_users:
-            save_env_value("MATRIX_ALLOWED_USERS", allowed_users.replace(" ", ""))
-            print_success("Matrix allowlist configured")
-        else:
-            print_info("⚠️  No allowlist set - anyone who can message the bot can use it!")
-
-        print()
-        print_info("📬 Home Room: where Hermes delivers cron job results and notifications.")
-        print_info("   Room IDs look like !abc123:server (shown in Element room settings)")
-        print_info("   You can also set this later by typing /set-home in a Matrix room.")
-        home_room = prompt("Home room ID (leave empty to set later with /set-home)")
-        if home_room:
-            save_env_value("MATRIX_HOME_ROOM", home_room)
 def _setup_whatsapp():
     """Configure WhatsApp bridge."""
     print_header("WhatsApp")
@@ -1966,7 +1882,6 @@ _GATEWAY_PLATFORMS = [
     ("Signal", "SIGNAL_HTTP_URL", _setup_signal),
     ("Email", "EMAIL_ADDRESS", _setup_email),
     ("SMS (Twilio)", "TWILIO_ACCOUNT_SID", _setup_sms),
-    ("Matrix", "MATRIX_ACCESS_TOKEN", _setup_matrix),
     ("WhatsApp", "WHATSAPP_ENABLED", _setup_whatsapp),
     ("DingTalk", "DINGTALK_CLIENT_ID", _setup_dingtalk),
     ("Feishu / Lark", "FEISHU_APP_ID", _setup_feishu),
@@ -1988,10 +1903,7 @@ def setup_gateway(config: dict):
     items = []
     pre_selected = []
     for i, (name, env_var, _func) in enumerate(_GATEWAY_PLATFORMS):
-        # Matrix has two possible env vars
         is_configured = bool(get_env_value(env_var))
-        if name == "Matrix" and not is_configured:
-            is_configured = bool(get_env_value("MATRIX_PASSWORD"))
         label = f"{name}  (configured)" if is_configured else name
         items.append(label)
         if is_configured:
@@ -2014,8 +1926,6 @@ def setup_gateway(config: dict):
         or get_env_value("SIGNAL_HTTP_URL")
         or get_env_value("EMAIL_ADDRESS")
         or get_env_value("TWILIO_ACCOUNT_SID")
-        or get_env_value("MATRIX_ACCESS_TOKEN")
-        or get_env_value("MATRIX_PASSWORD")
         or get_env_value("WHATSAPP_ENABLED")
         or get_env_value("DINGTALK_CLIENT_ID")
         or get_env_value("FEISHU_APP_ID")
@@ -2220,8 +2130,6 @@ def _get_section_config_summary(config: dict, section_key: str) -> Optional[str]
             platforms.append("Email")
         if get_env_value("TWILIO_ACCOUNT_SID"):
             platforms.append("SMS")
-        if get_env_value("MATRIX_ACCESS_TOKEN") or get_env_value("MATRIX_PASSWORD"):
-            platforms.append("Matrix")
         if get_env_value("WHATSAPP_PHONE_NUMBER_ID"):
             platforms.append("WhatsApp")
         if get_env_value("DINGTALK_CLIENT_ID"):

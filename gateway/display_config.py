@@ -75,7 +75,6 @@ _PLATFORM_DEFAULTS: dict[str, dict[str, Any]] = {
     "discord":     _TIER_HIGH,
 
     # Tier 2 — edit support, often customer/workspace channels
-    "matrix":          _TIER_MEDIUM,
     "feishu":          _TIER_MEDIUM,
 
     # Tier 3 — no edit support, progress messages are permanent

@@ -193,7 +193,6 @@ class WebhookAdapter(BasePlatformAdapter):
             "signal",
             "sms",
             "whatsapp",
-            "matrix",
             "homeassistant",
             "email",
             "dingtalk",

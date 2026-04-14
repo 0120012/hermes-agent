@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # in cron delivery targets, preventing env var enumeration via crafted names.
 _KNOWN_DELIVERY_PLATFORMS = frozenset({
     "telegram", "discord", "whatsapp", "signal",
-    "matrix", "homeassistant", "dingtalk", "feishu",
+    "homeassistant", "dingtalk", "feishu",
     "wecom", "wecom_callback", "weixin", "sms", "email", "webhook",
 })
 
@@ -91,7 +91,7 @@ def _resolve_delivery_target(job: dict) -> Optional[dict]:
             }
         # Origin missing (e.g. job created via API/script) — try each
         # platform's home channel as a fallback instead of silently dropping.
-        for platform_name in ("matrix", "telegram", "discord"):
+        for platform_name in ("telegram", "discord"):
             chat_id = os.getenv(f"{platform_name.upper()}_HOME_CHANNEL", "")
             if chat_id:
                 logger.info(
@@ -242,7 +242,6 @@ def _deliver_result(job: dict, content: str, adapters=None, loop=None) -> Option
         "discord": Platform.DISCORD,
         "whatsapp": Platform.WHATSAPP,
         "signal": Platform.SIGNAL,
-        "matrix": Platform.MATRIX,
         "homeassistant": Platform.HOMEASSISTANT,
         "dingtalk": Platform.DINGTALK,
         "feishu": Platform.FEISHU,

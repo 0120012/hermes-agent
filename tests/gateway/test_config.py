@@ -238,16 +238,6 @@ class TestHomeChannelEnvOverrides:
                 ("+1555000", "Phone"),
             ),
             (
-                Platform.MATRIX,
-                PlatformConfig(
-                    enabled=True,
-                    token="syt_abc123",
-                    extra={"homeserver": "https://matrix.example.org"},
-                ),
-                {"MATRIX_HOME_ROOM": "!room123:example.org", "MATRIX_HOME_ROOM_NAME": "Bot Room"},
-                ("!room123:example.org", "Bot Room"),
-            ),
-            (
                 Platform.EMAIL,
                 PlatformConfig(
                     enabled=True,

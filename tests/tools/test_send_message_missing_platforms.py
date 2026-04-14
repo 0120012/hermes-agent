@@ -1,4 +1,4 @@
-"""Tests for _send_matrix, _send_homeassistant, _send_dingtalk."""
+"""Tests for _send_homeassistant and _send_dingtalk."""
 
 import asyncio
 import os
@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from tools.send_message_tool import (
     _send_dingtalk,
     _send_homeassistant,
-    _send_matrix,
 )
 
 
@@ -40,103 +39,6 @@ def _make_aiohttp_session(resp):
     session_ctx.__aenter__ = AsyncMock(return_value=session)
     session_ctx.__aexit__ = AsyncMock(return_value=False)
     return session_ctx, session
-
-
-# ---------------------------------------------------------------------------
-# _send_matrix
-# ---------------------------------------------------------------------------
-
-
-class TestSendMatrix:
-    def test_success(self):
-        resp = _make_aiohttp_resp(200, json_data={"event_id": "$abc123"})
-        session_ctx, session = _make_aiohttp_session(resp)
-
-        with patch("aiohttp.ClientSession", return_value=session_ctx), \
-             patch.dict(os.environ, {"MATRIX_HOMESERVER": "", "MATRIX_ACCESS_TOKEN": ""}, clear=False):
-            extra = {"homeserver": "https://matrix.example.com"}
-            result = asyncio.run(_send_matrix("syt_tok", extra, "!room:example.com", "hello matrix"))
-
-        assert result == {
-            "success": True,
-            "platform": "matrix",
-            "chat_id": "!room:example.com",
-            "message_id": "$abc123",
-        }
-        session.put.assert_called_once()
-        call_kwargs = session.put.call_args
-        url = call_kwargs[0][0]
-        assert url.startswith("https://matrix.example.com/_matrix/client/v3/rooms/!room:example.com/send/m.room.message/")
-        assert call_kwargs[1]["headers"]["Authorization"] == "Bearer syt_tok"
-        payload = call_kwargs[1]["json"]
-        assert payload["msgtype"] == "m.text"
-        assert payload["body"] == "hello matrix"
-
-    def test_http_error(self):
-        resp = _make_aiohttp_resp(403, text_data="Forbidden")
-        session_ctx, _ = _make_aiohttp_session(resp)
-
-        with patch("aiohttp.ClientSession", return_value=session_ctx):
-            result = asyncio.run(_send_matrix(
-                "tok", {"homeserver": "https://matrix.example.com"},
-                "!room:example.com", "hi"
-            ))
-
-        assert "error" in result
-        assert "403" in result["error"]
-        assert "Forbidden" in result["error"]
-
-    def test_missing_config(self):
-        with patch.dict(os.environ, {"MATRIX_HOMESERVER": "", "MATRIX_ACCESS_TOKEN": ""}, clear=False):
-            result = asyncio.run(_send_matrix("", {}, "!room:example.com", "hi"))
-
-        assert "error" in result
-        assert "MATRIX_HOMESERVER" in result["error"] or "not configured" in result["error"]
-
-    def test_env_var_fallback(self):
-        resp = _make_aiohttp_resp(200, json_data={"event_id": "$ev1"})
-        session_ctx, session = _make_aiohttp_session(resp)
-
-        with patch("aiohttp.ClientSession", return_value=session_ctx), \
-             patch.dict(os.environ, {
-                 "MATRIX_HOMESERVER": "https://matrix.env.com",
-                 "MATRIX_ACCESS_TOKEN": "env-tok",
-             }, clear=False):
-            result = asyncio.run(_send_matrix("", {}, "!r:env.com", "hi"))
-
-        assert result["success"] is True
-        url = session.put.call_args[0][0]
-        assert "matrix.env.com" in url
-
-    def test_txn_id_is_unique_across_calls(self):
-        """Each call should generate a distinct transaction ID in the URL."""
-        txn_ids = []
-
-        def capture(*args, **kwargs):
-            url = args[0]
-            txn_ids.append(url.rsplit("/", 1)[-1])
-            ctx = MagicMock()
-            ctx.__aenter__ = AsyncMock(return_value=_make_aiohttp_resp(200, json_data={"event_id": "$x"}))
-            ctx.__aexit__ = AsyncMock(return_value=False)
-            return ctx
-
-        session = MagicMock()
-        session.put = capture
-        session_ctx = MagicMock()
-        session_ctx.__aenter__ = AsyncMock(return_value=session)
-        session_ctx.__aexit__ = AsyncMock(return_value=False)
-
-        extra = {"homeserver": "https://matrix.example.com"}
-
-        import time
-        with patch("aiohttp.ClientSession", return_value=session_ctx):
-            asyncio.run(_send_matrix("tok", extra, "!r:example.com", "first"))
-        time.sleep(0.002)
-        with patch("aiohttp.ClientSession", return_value=session_ctx):
-            asyncio.run(_send_matrix("tok", extra, "!r:example.com", "second"))
-
-        assert len(txn_ids) == 2
-        assert txn_ids[0] != txn_ids[1]
 
 
 # ---------------------------------------------------------------------------

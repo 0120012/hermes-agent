@@ -52,7 +52,6 @@ class Platform(Enum):
     DISCORD = "discord"
     WHATSAPP = "whatsapp"
     SIGNAL = "signal"
-    MATRIX = "matrix"
     HOMEASSISTANT = "homeassistant"
     EMAIL = "email"
     SMS = "sms"
@@ -617,21 +616,6 @@ def load_gateway_config() -> GatewayConfig:
                         frc = ",".join(str(v) for v in frc)
                     os.environ["WHATSAPP_FREE_RESPONSE_CHATS"] = str(frc)
 
-            # Matrix settings → env vars (env vars take precedence)
-            matrix_cfg = yaml_cfg.get("matrix", {})
-            if isinstance(matrix_cfg, dict):
-                if "require_mention" in matrix_cfg and not os.getenv("MATRIX_REQUIRE_MENTION"):
-                    os.environ["MATRIX_REQUIRE_MENTION"] = str(matrix_cfg["require_mention"]).lower()
-                frc = matrix_cfg.get("free_response_rooms")
-                if frc is not None and not os.getenv("MATRIX_FREE_RESPONSE_ROOMS"):
-                    if isinstance(frc, list):
-                        frc = ",".join(str(v) for v in frc)
-                    os.environ["MATRIX_FREE_RESPONSE_ROOMS"] = str(frc)
-                if "auto_thread" in matrix_cfg and not os.getenv("MATRIX_AUTO_THREAD"):
-                    os.environ["MATRIX_AUTO_THREAD"] = str(matrix_cfg["auto_thread"]).lower()
-                if "dm_mention_threads" in matrix_cfg and not os.getenv("MATRIX_DM_MENTION_THREADS"):
-                    os.environ["MATRIX_DM_MENTION_THREADS"] = str(matrix_cfg["dm_mention_threads"]).lower()
-
     except Exception as e:
         logger.warning(
             "Failed to process config.yaml — falling back to .env / gateway.json values. "
@@ -677,7 +661,6 @@ def _validate_gateway_config(config: "GatewayConfig") -> None:
     _token_env_names = {
         Platform.TELEGRAM: "TELEGRAM_BOT_TOKEN",
         Platform.DISCORD: "DISCORD_BOT_TOKEN",
-        Platform.MATRIX: "MATRIX_ACCESS_TOKEN",
         Platform.WEIXIN: "WEIXIN_TOKEN",
     }
     for platform, pconfig in config.platforms.items():
@@ -800,37 +783,6 @@ def _apply_env_overrides(config: GatewayConfig) -> None:
             platform=Platform.SIGNAL,
             chat_id=signal_home,
             name=os.getenv("SIGNAL_HOME_CHANNEL_NAME", "Home"),
-        )
-
-    # Matrix
-    matrix_token = os.getenv("MATRIX_ACCESS_TOKEN")
-    matrix_homeserver = os.getenv("MATRIX_HOMESERVER", "")
-    if matrix_token or os.getenv("MATRIX_PASSWORD"):
-        if not matrix_homeserver:
-            logger.warning("MATRIX_ACCESS_TOKEN/MATRIX_PASSWORD set but MATRIX_HOMESERVER is missing")
-        if Platform.MATRIX not in config.platforms:
-            config.platforms[Platform.MATRIX] = PlatformConfig()
-        config.platforms[Platform.MATRIX].enabled = True
-        if matrix_token:
-            config.platforms[Platform.MATRIX].token = matrix_token
-        config.platforms[Platform.MATRIX].extra["homeserver"] = matrix_homeserver
-        matrix_user = os.getenv("MATRIX_USER_ID", "")
-        if matrix_user:
-            config.platforms[Platform.MATRIX].extra["user_id"] = matrix_user
-        matrix_password = os.getenv("MATRIX_PASSWORD", "")
-        if matrix_password:
-            config.platforms[Platform.MATRIX].extra["password"] = matrix_password
-        matrix_e2ee = os.getenv("MATRIX_ENCRYPTION", "").lower() in ("true", "1", "yes")
-        config.platforms[Platform.MATRIX].extra["encryption"] = matrix_e2ee
-        matrix_device_id = os.getenv("MATRIX_DEVICE_ID", "")
-        if matrix_device_id:
-            config.platforms[Platform.MATRIX].extra["device_id"] = matrix_device_id
-    matrix_home = os.getenv("MATRIX_HOME_ROOM")
-    if matrix_home and Platform.MATRIX in config.platforms:
-        config.platforms[Platform.MATRIX].home_channel = HomeChannel(
-            platform=Platform.MATRIX,
-            chat_id=matrix_home,
-            name=os.getenv("MATRIX_HOME_ROOM_NAME", "Home"),
         )
 
     # Home Assistant

@@ -150,7 +150,6 @@ def _handle_send(args):
         "discord": Platform.DISCORD,
         "whatsapp": Platform.WHATSAPP,
         "signal": Platform.SIGNAL,
-        "matrix": Platform.MATRIX,
         "homeassistant": Platform.HOMEASSISTANT,
         "dingtalk": Platform.DINGTALK,
         "feishu": Platform.FEISHU,
@@ -398,8 +397,6 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
             result = await _send_email(pconfig.extra, chat_id, chunk)
         elif platform == Platform.SMS:
             result = await _send_sms(pconfig.api_key, chat_id, chunk)
-        elif platform == Platform.MATRIX:
-            result = await _send_matrix(pconfig.token, pconfig.extra, chat_id, chunk)
         elif platform == Platform.HOMEASSISTANT:
             result = await _send_homeassistant(pconfig.token, pconfig.extra, chat_id, chunk)
         elif platform == Platform.DINGTALK:
@@ -734,48 +731,6 @@ async def _send_sms(auth_token, chat_id, message):
         return _error(f"SMS send failed: {e}")
 
 
-
-
-async def _send_matrix(token, extra, chat_id, message):
-    """Send via Matrix Client-Server API.
-
-    Converts markdown to HTML for rich rendering in Matrix clients.
-    Falls back to plain text if the ``markdown`` library is not installed.
-    """
-    try:
-        import aiohttp
-    except ImportError:
-        return {"error": "aiohttp not installed. Run: pip install aiohttp"}
-    try:
-        homeserver = (extra.get("homeserver") or os.getenv("MATRIX_HOMESERVER", "")).rstrip("/")
-        token = token or os.getenv("MATRIX_ACCESS_TOKEN", "")
-        if not homeserver or not token:
-            return {"error": "Matrix not configured (MATRIX_HOMESERVER, MATRIX_ACCESS_TOKEN required)"}
-        txn_id = f"hermes_{int(time.time() * 1000)}_{os.urandom(4).hex()}"
-        url = f"{homeserver}/_matrix/client/v3/rooms/{chat_id}/send/m.room.message/{txn_id}"
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-
-        # Build message payload with optional HTML formatted_body.
-        payload = {"msgtype": "m.text", "body": message}
-        try:
-            import markdown as _md
-            html = _md.markdown(message, extensions=["fenced_code", "tables"])
-            # Convert h1-h6 to bold for Element X compatibility.
-            html = re.sub(r"<h[1-6]>(.*?)</h[1-6]>", r"<strong>\1</strong>", html)
-            payload["format"] = "org.matrix.custom.html"
-            payload["formatted_body"] = html
-        except ImportError:
-            pass
-
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
-            async with session.put(url, headers=headers, json=payload) as resp:
-                if resp.status not in (200, 201):
-                    body = await resp.text()
-                    return _error(f"Matrix API error ({resp.status}): {body}")
-                data = await resp.json()
-        return {"success": True, "platform": "matrix", "chat_id": chat_id, "message_id": data.get("event_id")}
-    except Exception as e:
-        return _error(f"Matrix send failed: {e}")
 
 
 async def _send_homeassistant(token, extra, chat_id, message):

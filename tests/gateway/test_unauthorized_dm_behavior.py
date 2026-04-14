@@ -17,7 +17,6 @@ def _clear_auth_env(monkeypatch) -> None:
         "SIGNAL_ALLOWED_USERS",
         "EMAIL_ALLOWED_USERS",
         "SMS_ALLOWED_USERS",
-        "MATRIX_ALLOWED_USERS",
         "DINGTALK_ALLOWED_USERS", "FEISHU_ALLOWED_USERS", "WECOM_ALLOWED_USERS",
         "GATEWAY_ALLOWED_USERS",
         "TELEGRAM_ALLOW_ALL_USERS",
@@ -26,7 +25,6 @@ def _clear_auth_env(monkeypatch) -> None:
         "SIGNAL_ALLOW_ALL_USERS",
         "EMAIL_ALLOW_ALL_USERS",
         "SMS_ALLOW_ALL_USERS",
-        "MATRIX_ALLOW_ALL_USERS",
         "DINGTALK_ALLOW_ALL_USERS", "FEISHU_ALLOW_ALL_USERS", "WECOM_ALLOW_ALL_USERS",
         "GATEWAY_ALLOW_ALL_USERS",
     ):
