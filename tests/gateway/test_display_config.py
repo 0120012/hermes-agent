@@ -71,11 +71,11 @@ class TestResolveDisplaySetting:
             "display": {
                 "tool_progress": "all",
                 "platforms": {
-                    "slack": {"tool_progress": "off"},
+                    "discord": {"tool_progress": "off"},
                 },
             }
         }
-        assert resolve_display_setting(config, "slack", "tool_progress") == "off"
+        assert resolve_display_setting(config, "discord", "tool_progress") == "off"
         assert resolve_display_setting(config, "telegram", "tool_progress") == "all"
 
 
@@ -160,15 +160,15 @@ class TestYAMLNormalisation:
         """String numbers are normalised to int."""
         from gateway.display_config import resolve_display_setting
 
-        config = {"display": {"platforms": {"slack": {"tool_preview_length": "80"}}}}
-        assert resolve_display_setting(config, "slack", "tool_preview_length") == 80
+        config = {"display": {"platforms": {"discord": {"tool_preview_length": "80"}}}}
+        assert resolve_display_setting(config, "discord", "tool_preview_length") == 80
 
     def test_platform_override_false_tool_progress(self):
         """Per-platform bare off → normalised."""
         from gateway.display_config import resolve_display_setting
 
-        config = {"display": {"platforms": {"slack": {"tool_progress": False}}}}
-        assert resolve_display_setting(config, "slack", "tool_progress") == "off"
+        config = {"display": {"platforms": {"discord": {"tool_progress": False}}}}
+        assert resolve_display_setting(config, "discord", "tool_progress") == "off"
 
 
 # ---------------------------------------------------------------------------
@@ -186,10 +186,10 @@ class TestPlatformDefaults:
             assert resolve_display_setting({}, plat, "tool_progress") == "all", plat
 
     def test_medium_tier_platforms(self):
-        """Slack, Mattermost, Matrix default to 'new' tool progress."""
+        """Matrix、Feishu、WhatsApp 默认使用中层 tool progress。"""
         from gateway.display_config import resolve_display_setting
 
-        for plat in ("slack", "mattermost", "matrix", "feishu", "whatsapp"):
+        for plat in ("matrix", "feishu", "whatsapp"):
             assert resolve_display_setting({}, plat, "tool_progress") == "new", plat
 
     def test_low_tier_platforms(self):

@@ -75,8 +75,6 @@ _PLATFORM_DEFAULTS: dict[str, dict[str, Any]] = {
     "discord":     _TIER_HIGH,
 
     # Tier 2 — edit support, often customer/workspace channels
-    "slack":           _TIER_MEDIUM,
-    "mattermost":      _TIER_MEDIUM,
     "matrix":          _TIER_MEDIUM,
     "feishu":          _TIER_MEDIUM,
 
@@ -113,7 +111,7 @@ def resolve_display_setting(
     user_config : dict
         The full parsed config.yaml dict.
     platform_key : str
-        Platform config key (e.g. ``"telegram"``, ``"slack"``).  Use
+        Platform config key (e.g. ``"telegram"``, ``"discord"``).  Use
         ``_platform_config_key(source.platform)`` from gateway/run.py.
     setting : str
         Display setting name (e.g. ``"tool_progress"``, ``"show_reasoning"``).

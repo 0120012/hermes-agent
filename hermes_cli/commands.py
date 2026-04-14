@@ -624,24 +624,6 @@ def discord_skill_commands(
         desc_limit=100,
     )
 
-
-def slack_subcommand_map() -> dict[str, str]:
-    """Return subcommand -> /command mapping for Slack /hermes handler.
-
-    Maps both canonical names and aliases so /hermes bg do stuff works
-    the same as /hermes background do stuff.
-    """
-    overrides = _resolve_config_gates()
-    mapping: dict[str, str] = {}
-    for cmd in COMMAND_REGISTRY:
-        if not _is_gateway_available(cmd, overrides):
-            continue
-        mapping[cmd.name] = f"/{cmd.name}"
-        for alias in cmd.aliases:
-            mapping[alias] = f"/{alias}"
-    return mapping
-
-
 # ---------------------------------------------------------------------------
 # Autocomplete
 # ---------------------------------------------------------------------------

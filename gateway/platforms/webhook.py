@@ -190,12 +190,10 @@ class WebhookAdapter(BasePlatformAdapter):
         if self.gateway_runner and deliver_type in (
             "telegram",
             "discord",
-            "slack",
             "signal",
             "sms",
             "whatsapp",
             "matrix",
-            "mattermost",
             "homeassistant",
             "email",
             "dingtalk",

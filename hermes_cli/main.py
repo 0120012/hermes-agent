@@ -5025,7 +5025,7 @@ For more help on a command:
     wh_sub.add_argument("--events", default="", help="Comma-separated event types to accept")
     wh_sub.add_argument("--description", default="", help="What this subscription does")
     wh_sub.add_argument("--skills", default="", help="Comma-separated skill names to load")
-    wh_sub.add_argument("--deliver", default="log", help="Delivery target: log, telegram, discord, slack, etc.")
+    wh_sub.add_argument("--deliver", default="log", help="Delivery target: log, telegram, discord, whatsapp, etc.")
     wh_sub.add_argument("--deliver-chat-id", default="", help="Target chat ID for cross-platform delivery")
     wh_sub.add_argument("--secret", default="", help="HMAC secret (auto-generated if omitted)")
 
@@ -5202,7 +5202,7 @@ Examples:
     pairing_sub.add_parser("list", help="Show pending + approved users")
 
     pairing_approve_parser = pairing_sub.add_parser("approve", help="Approve a pairing code")
-    pairing_approve_parser.add_argument("platform", help="Platform name (telegram, discord, slack, whatsapp)")
+    pairing_approve_parser.add_argument("platform", help="Platform name (telegram, discord, whatsapp)")
     pairing_approve_parser.add_argument("code", help="Pairing code to approve")
 
     pairing_revoke_parser = pairing_sub.add_parser("revoke", help="Revoke user access")
@@ -5711,7 +5711,7 @@ Examples:
             msgs = db.message_count()
             print(f"Total sessions: {total}")
             print(f"Total messages: {msgs}")
-            for src in ["cli", "telegram", "discord", "whatsapp", "slack"]:
+            for src in ["cli", "telegram", "discord", "whatsapp"]:
                 c = db.session_count(source=src)
                 if c > 0:
                     print(f"  {src}: {c} sessions")

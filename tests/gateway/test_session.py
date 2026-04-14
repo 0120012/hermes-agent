@@ -138,7 +138,7 @@ class TestSessionSourceDescription:
 
     def test_unknown_chat_type_uses_name(self):
         source = SessionSource(
-            platform=Platform.SLACK, chat_id="C01",
+            platform=Platform.DISCORD, chat_id="C01",
             chat_type="forum", chat_name="Questions",
         )
         assert "Questions" in source.description
@@ -204,26 +204,6 @@ class TestBuildSessionContextPrompt:
 
         assert "Discord" in prompt
         assert "cannot search" in prompt.lower() or "do not have access" in prompt.lower()
-
-    def test_slack_prompt_includes_platform_notes(self):
-        config = GatewayConfig(
-            platforms={
-                Platform.SLACK: PlatformConfig(enabled=True, token="fake"),
-            },
-        )
-        source = SessionSource(
-            platform=Platform.SLACK,
-            chat_id="C123",
-            chat_name="general",
-            chat_type="group",
-            user_name="bob",
-        )
-        ctx = build_session_context(source, config)
-        prompt = build_session_context_prompt(ctx)
-
-        assert "Slack" in prompt
-        assert "cannot search" in prompt.lower()
-        assert "pin" in prompt.lower()
 
     def test_discord_prompt_with_channel_topic(self):
         """Channel topic should appear in the session context prompt."""

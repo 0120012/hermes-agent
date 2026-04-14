@@ -20,7 +20,6 @@ from hermes_cli.commands import (
     discord_skill_commands,
     gateway_help_lines,
     resolve_command,
-    slack_subcommand_map,
     telegram_bot_commands,
     telegram_menu_commands,
 )
@@ -228,32 +227,6 @@ class TestTelegramBotCommands:
                 assert tg_name not in names
 
 
-class TestSlackSubcommandMap:
-    def test_returns_dict(self):
-        mapping = slack_subcommand_map()
-        assert isinstance(mapping, dict)
-        assert len(mapping) > 10
-
-    def test_values_are_slash_prefixed(self):
-        for key, val in slack_subcommand_map().items():
-            assert val.startswith("/"), f"Slack mapping for '{key}' should start with /"
-
-    def test_includes_aliases(self):
-        mapping = slack_subcommand_map()
-        assert "bg" in mapping
-        assert "reset" in mapping
-
-    def test_excludes_cli_only_without_config_gate(self):
-        mapping = slack_subcommand_map()
-        for cmd in COMMAND_REGISTRY:
-            if cmd.cli_only and not cmd.gateway_config_gate:
-                assert cmd.name not in mapping
-
-
-# ---------------------------------------------------------------------------
-# Config-gated gateway commands
-# ---------------------------------------------------------------------------
-
 class TestGatewayConfigGate:
     """Tests for the gateway_config_gate mechanism on CommandDef."""
 
@@ -303,23 +276,6 @@ class TestGatewayConfigGate:
 
         names = {name for name, _ in telegram_bot_commands()}
         assert "verbose" in names
-
-    def test_config_gate_excluded_from_slack_when_off(self, tmp_path, monkeypatch):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("display:\n  tool_progress_command: false\n")
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-
-        mapping = slack_subcommand_map()
-        assert "verbose" not in mapping
-
-    def test_config_gate_included_in_slack_when_on(self, tmp_path, monkeypatch):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("display:\n  tool_progress_command: true\n")
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-
-        mapping = slack_subcommand_map()
-        assert "verbose" in mapping
-
 
 # ---------------------------------------------------------------------------
 # Autocomplete (SlashCommandCompleter)

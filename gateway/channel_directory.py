@@ -71,8 +71,6 @@ def build_channel_directory(adapters: Dict[Any, Any]) -> Dict[str, Any]:
         try:
             if platform == Platform.DISCORD:
                 platforms["discord"] = _build_discord(adapter)
-            elif platform == Platform.SLACK:
-                platforms["slack"] = _build_slack(adapter)
         except Exception as e:
             logger.warning("Channel directory: failed to build %s: %s", platform.value, e)
 
@@ -125,23 +123,6 @@ def _build_discord(adapter) -> List[Dict[str, str]]:
     # Merge any DMs from session history
     channels.extend(_build_from_sessions("discord"))
     return channels
-
-
-def _build_slack(adapter) -> List[Dict[str, str]]:
-    """List Slack channels the bot has joined."""
-    # Slack adapter may expose a web client
-    client = getattr(adapter, "_app", None) or getattr(adapter, "_client", None)
-    if not client:
-        return _build_from_sessions("slack")
-
-    try:
-        from tools.send_message_tool import _send_slack  # noqa: F401
-        # Use the Slack Web API directly if available
-    except Exception:
-        pass
-
-    # Fallback to session data
-    return _build_from_sessions("slack")
 
 
 def _build_from_sessions(platform_name: str) -> List[Dict[str, str]]:

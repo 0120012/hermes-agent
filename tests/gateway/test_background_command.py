@@ -6,6 +6,8 @@ background session) across gateway messenger platforms.
 
 import asyncio
 import os
+import sys
+import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -143,7 +145,7 @@ class TestHandleBackgroundCommand:
     @pytest.mark.asyncio
     async def test_works_across_platforms(self):
         """The /background command works for all platforms."""
-        for platform in [Platform.TELEGRAM, Platform.DISCORD, Platform.SLACK]:
+        for platform in [Platform.TELEGRAM, Platform.DISCORD, Platform.WHATSAPP]:
             runner = _make_runner()
             with patch("gateway.run.asyncio.create_task", side_effect=lambda c, **kw: (c.close(), MagicMock())[1]):
                 event = _make_event(
@@ -161,6 +163,12 @@ class TestHandleBackgroundCommand:
 
 class TestRunBackgroundTask:
     """Tests for GatewayRunner._run_background_task (the actual execution)."""
+
+    @pytest.fixture(autouse=True)
+    def _fake_run_agent_module(self, monkeypatch):
+        fake_run_agent = types.ModuleType("run_agent")
+        fake_run_agent.AIAgent = MagicMock()
+        monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)
 
     @pytest.mark.asyncio
     async def test_no_adapter_returns_silently(self):
