@@ -203,7 +203,6 @@ class WebhookAdapter(BasePlatformAdapter):
             "wecom",
             "wecom_callback",
             "weixin",
-            "bluebubbles",
         ):
             return await self._deliver_cross_platform(
                 deliver_type, content, delivery

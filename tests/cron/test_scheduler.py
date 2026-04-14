@@ -3,11 +3,23 @@
 import json
 import logging
 import os
+from pathlib import Path
 from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
 
 from cron.scheduler import _resolve_origin, _resolve_delivery_target, _deliver_result, _send_media_via_adapter, run_job, SILENT_MARKER, _build_job_prompt
+
+
+# 为什么：cron.scheduler 在模块导入时就冻结了锁路径，测试必须把它重定向到隔离的 HERMES_HOME。
+@pytest.fixture(autouse=True)
+def _isolate_scheduler_lock(monkeypatch):
+    import cron.scheduler as scheduler
+
+    hermes_home = Path(os.environ["HERMES_HOME"])
+    lock_dir = hermes_home / "cron"
+    monkeypatch.setattr(scheduler, "_LOCK_DIR", lock_dir)
+    monkeypatch.setattr(scheduler, "_LOCK_FILE", lock_dir / ".tick.lock")
 
 
 class TestResolveOrigin:

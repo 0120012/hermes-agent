@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 _KNOWN_DELIVERY_PLATFORMS = frozenset({
     "telegram", "discord", "slack", "whatsapp", "signal",
     "matrix", "mattermost", "homeassistant", "dingtalk", "feishu",
-    "wecom", "wecom_callback", "weixin", "sms", "email", "webhook", "bluebubbles",
+    "wecom", "wecom_callback", "weixin", "sms", "email", "webhook",
 })
 
 from cron.jobs import get_due_jobs, mark_job_run, save_job_output, advance_next_run
@@ -91,7 +91,7 @@ def _resolve_delivery_target(job: dict) -> Optional[dict]:
             }
         # Origin missing (e.g. job created via API/script) — try each
         # platform's home channel as a fallback instead of silently dropping.
-        for platform_name in ("matrix", "telegram", "discord", "slack", "bluebubbles"):
+        for platform_name in ("matrix", "telegram", "discord", "slack"):
             chat_id = os.getenv(f"{platform_name.upper()}_HOME_CHANNEL", "")
             if chat_id:
                 logger.info(
@@ -253,7 +253,6 @@ def _deliver_result(job: dict, content: str, adapters=None, loop=None) -> Option
         "weixin": Platform.WEIXIN,
         "email": Platform.EMAIL,
         "sms": Platform.SMS,
-        "bluebubbles": Platform.BLUEBUBBLES,
     }
     platform = platform_map.get(platform_name.lower())
     if not platform:

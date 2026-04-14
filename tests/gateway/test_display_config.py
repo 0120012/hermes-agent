@@ -193,10 +193,10 @@ class TestPlatformDefaults:
             assert resolve_display_setting({}, plat, "tool_progress") == "new", plat
 
     def test_low_tier_platforms(self):
-        """Signal, BlueBubbles, etc. default to 'off' tool progress."""
+        """Signal、Weixin、WeCom 等默认关闭 tool progress。"""
         from gateway.display_config import resolve_display_setting
 
-        for plat in ("signal", "bluebubbles", "weixin", "wecom", "dingtalk"):
+        for plat in ("signal", "weixin", "wecom", "dingtalk"):
             assert resolve_display_setting({}, plat, "tool_progress") == "off", plat
 
     def test_minimal_tier_platforms(self):
