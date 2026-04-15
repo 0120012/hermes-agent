@@ -79,7 +79,7 @@ from agent.memory_manager import build_memory_context_block
 from agent.retry_utils import jittered_backoff
 from agent.error_classifier import classify_api_error, FailoverReason
 from agent.prompt_builder import (
-    DEFAULT_AGENT_IDENTITY, PLATFORM_HINTS,
+    INIT_AGENT_IDENTITY, DEFAULT_AGENT_IDENTITY, PLATFORM_HINTS,
     MEMORY_GUIDANCE, SESSION_SEARCH_GUIDANCE, SKILLS_GUIDANCE,
     build_nous_subscription_prompt,
 )
@@ -3112,12 +3112,13 @@ class AIAgent:
         #   7. Platform-specific formatting hint
 
         # Try SOUL.md as primary identity (unless context files are skipped)
+        prompt_parts: list[str] = [INIT_AGENT_IDENTITY]
         _soul_loaded = False
         if not self.skip_context_files:
-            _soul_content = load_soul_md()
-            if _soul_content:
-                prompt_parts = [_soul_content]
-                _soul_loaded = True
+            # _soul_content = load_soul_md()
+            # if _soul_content:
+            #     prompt_parts = [_soul_content]
+            _soul_loaded = True
 
         if not _soul_loaded:
             # Fallback to hardcoded identity
@@ -3176,26 +3177,6 @@ class AIAgent:
         # API-call time only so it stays out of the cached/stored system prompt.
         if system_message is not None:
             prompt_parts.append(system_message)
-
-        if self._memory_store:
-            if self._memory_enabled:
-                mem_block = self._memory_store.format_for_system_prompt("memory")
-                if mem_block:
-                    prompt_parts.append(mem_block)
-            # USER.md is always included when enabled.
-            if self._user_profile_enabled:
-                user_block = self._memory_store.format_for_system_prompt("user")
-                if user_block:
-                    prompt_parts.append(user_block)
-
-        # External memory provider system prompt block (additive to built-in)
-        if self._memory_manager:
-            try:
-                _ext_mem_block = self._memory_manager.build_system_prompt()
-                if _ext_mem_block:
-                    prompt_parts.append(_ext_mem_block)
-            except Exception:
-                pass
 
         has_skills_tools = any(name in self.valid_tool_names for name in ['skills_list', 'skill_view', 'skill_manage'])
         if has_skills_tools:
@@ -3258,6 +3239,13 @@ class AIAgent:
         platform_key = (self.platform or "").lower().strip()
         if platform_key in PLATFORM_HINTS:
             prompt_parts.append(PLATFORM_HINTS[platform_key])
+
+        if _soul_loaded:
+            prompt_parts.append(
+                "Then immediately run `mcp_nocturne_memory_$profile.read_memory(\"system://boot\")` "
+                "(replace `$profile` with the active profile name), read the full output carefully, "
+                "and follow it before taking any other action."
+            )
 
         return "\n\n".join(p.strip() for p in prompt_parts if p.strip())
 
