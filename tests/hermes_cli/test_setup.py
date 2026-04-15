@@ -146,11 +146,10 @@ def test_setup_custom_providers_synced(tmp_path, monkeypatch):
 
 def test_setup_gateway_skips_service_install_when_systemctl_missing(monkeypatch, capsys):
     env = {
-        "TELEGRAM_BOT_TOKEN": "",
+        "TELEGRAM_BOT_TOKEN": "fake-token",
         "TELEGRAM_HOME_CHANNEL": "",
         "DISCORD_BOT_TOKEN": "",
         "DISCORD_HOME_CHANNEL": "",
-        "WHATSAPP_ENABLED": "true",
         "WEBHOOK_ENABLED": "",
     }
 
@@ -176,11 +175,10 @@ def test_setup_gateway_skips_service_install_when_systemctl_missing(monkeypatch,
 def test_setup_gateway_in_container_shows_docker_guidance(monkeypatch, capsys):
     """setup_gateway() in a Docker container shows Docker-specific restart instructions."""
     env = {
-        "TELEGRAM_BOT_TOKEN": "",
+        "TELEGRAM_BOT_TOKEN": "fake-token",
         "TELEGRAM_HOME_CHANNEL": "",
         "DISCORD_BOT_TOKEN": "",
         "DISCORD_HOME_CHANNEL": "",
-        "WHATSAPP_ENABLED": "true",
         "WEBHOOK_ENABLED": "",
     }
 

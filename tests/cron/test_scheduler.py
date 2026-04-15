@@ -97,17 +97,17 @@ class TestResolveDeliveryTarget:
         }
 
     def test_human_friendly_label_resolved_via_channel_directory(self):
-        """deliver: 'whatsapp:Alice (dm)' resolves to the real JID."""
-        job = {"deliver": "whatsapp:Alice (dm)"}
+        """deliver: 'signal:Alice (dm)' resolves to the real target."""
+        job = {"deliver": "signal:Alice (dm)"}
         with patch(
             "gateway.channel_directory.resolve_channel_name",
-            return_value="12345678901234@lid",
+            return_value="+15551234567",
         ) as resolve_mock:
             result = _resolve_delivery_target(job)
-        resolve_mock.assert_called_once_with("whatsapp", "Alice (dm)")
+        resolve_mock.assert_called_once_with("signal", "Alice (dm)")
         assert result == {
-            "platform": "whatsapp",
-            "chat_id": "12345678901234@lid",
+            "platform": "signal",
+            "chat_id": "+15551234567",
             "thread_id": None,
         }
 
@@ -140,16 +140,16 @@ class TestResolveDeliveryTarget:
         }
 
     def test_raw_id_not_mangled_when_directory_returns_none(self):
-        """deliver: 'whatsapp:12345@lid' passes through when directory has no match."""
-        job = {"deliver": "whatsapp:12345@lid"}
+        """deliver: 'signal:+15551234567' passes through when directory has no match."""
+        job = {"deliver": "signal:+15551234567"}
         with patch(
             "gateway.channel_directory.resolve_channel_name",
             return_value=None,
         ):
             result = _resolve_delivery_target(job)
         assert result == {
-            "platform": "whatsapp",
-            "chat_id": "12345@lid",
+            "platform": "signal",
+            "chat_id": "+15551234567",
             "thread_id": None,
         }
 

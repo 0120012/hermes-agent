@@ -1624,12 +1624,6 @@ _PLATFORMS = [
         ],
     },
     {
-        "key": "whatsapp",
-        "label": "WhatsApp",
-        "emoji": "📲",
-        "token_var": "WHATSAPP_ENABLED",
-    },
-    {
         "key": "signal",
         "label": "Signal",
         "emoji": "📡",
@@ -1807,13 +1801,6 @@ def _platform_status(platform: dict) -> str:
     """
     token_var = platform["token_var"]
     val = get_env_value(token_var)
-    if token_var == "WHATSAPP_ENABLED":
-        if val and val.lower() == "true":
-            session_file = get_hermes_home() / "whatsapp" / "session" / "creds.json"
-            if session_file.exists():
-                return "configured + paired"
-            return "enabled, not paired"
-        return "not configured"
     if platform.get("key") == "signal":
         account = get_env_value("SIGNAL_ACCOUNT")
         if val and account:
@@ -1973,14 +1960,6 @@ def _setup_standard_platform(platform: dict):
 
     print()
     print_success(f"{emoji} {label} configured!")
-
-
-def _setup_whatsapp():
-    """Delegate to the existing WhatsApp setup flow."""
-    from hermes_cli.main import cmd_whatsapp
-    import argparse
-    cmd_whatsapp(argparse.Namespace())
-
 
 def _setup_email():
     """Configure Email via the standard platform setup."""
@@ -2527,9 +2506,7 @@ def gateway_setup():
 
         platform = _PLATFORMS[choice]
 
-        if platform["key"] == "whatsapp":
-            _setup_whatsapp()
-        elif platform["key"] == "signal":
+        if platform["key"] == "signal":
             _setup_signal()
         elif platform["key"] == "weixin":
             _setup_weixin()
@@ -2542,8 +2519,7 @@ def gateway_setup():
     any_configured = any(
         bool(get_env_value(p["token_var"]))
         for p in _PLATFORMS
-        if p["key"] != "whatsapp"
-    ) or (get_env_value("WHATSAPP_ENABLED") or "").lower() == "true"
+    )
 
     if any_configured:
         print()

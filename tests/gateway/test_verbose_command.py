@@ -152,17 +152,17 @@ class TestVerboseCommand:
         await runner._handle_verbose_command(
             _make_event(platform=Platform.TELEGRAM)
         )
-        # Cycle on WhatsApp
+        # Cycle on Feishu
         await runner._handle_verbose_command(
-            _make_event(platform=Platform.WHATSAPP)
+            _make_event(platform=Platform.FEISHU)
         )
 
         saved = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         platforms = saved["display"]["platforms"]
         # Telegram: all -> verbose (high tier default = all)
         assert platforms["telegram"]["tool_progress"] == "verbose"
-        # WhatsApp: new -> all (medium tier default = new, cycle to all)
-        assert platforms["whatsapp"]["tool_progress"] == "all"
+        # Feishu: new -> all (medium tier default = new, cycle to all)
+        assert platforms["feishu"]["tool_progress"] == "all"
 
     @pytest.mark.asyncio
     async def test_no_config_file_returns_disabled(self, tmp_path, monkeypatch):

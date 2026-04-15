@@ -1765,24 +1765,6 @@ def _clean_discord_user_ids(raw: str) -> list:
     return cleaned
 
 
-def _setup_whatsapp():
-    """Configure WhatsApp bridge."""
-    print_header("WhatsApp")
-    existing = get_env_value("WHATSAPP_ENABLED")
-    if existing:
-        print_info("WhatsApp: already enabled")
-        return
-
-    print_info("WhatsApp connects via a built-in bridge (Baileys).")
-    print_info("Requires Node.js. Run 'hermes whatsapp' for guided setup.")
-    print()
-    if prompt_yes_no("Enable WhatsApp now?", True):
-        save_env_value("WHATSAPP_ENABLED", "true")
-        print_success("WhatsApp enabled")
-        print_info("Run 'hermes whatsapp' to choose your mode (separate bot number")
-        print_info("or personal self-chat) and pair via QR code.")
-
-
 def _setup_weixin():
     """Configure Weixin (personal WeChat) via iLink Bot API QR login."""
     from hermes_cli.gateway import _setup_weixin as _gateway_setup_weixin
@@ -1882,7 +1864,6 @@ _GATEWAY_PLATFORMS = [
     ("Signal", "SIGNAL_HTTP_URL", _setup_signal),
     ("Email", "EMAIL_ADDRESS", _setup_email),
     ("SMS (Twilio)", "TWILIO_ACCOUNT_SID", _setup_sms),
-    ("WhatsApp", "WHATSAPP_ENABLED", _setup_whatsapp),
     ("DingTalk", "DINGTALK_CLIENT_ID", _setup_dingtalk),
     ("Feishu / Lark", "FEISHU_APP_ID", _setup_feishu),
     ("WeCom (Enterprise WeChat)", "WECOM_BOT_ID", _setup_wecom),
@@ -1926,7 +1907,6 @@ def setup_gateway(config: dict):
         or get_env_value("SIGNAL_HTTP_URL")
         or get_env_value("EMAIL_ADDRESS")
         or get_env_value("TWILIO_ACCOUNT_SID")
-        or get_env_value("WHATSAPP_ENABLED")
         or get_env_value("DINGTALK_CLIENT_ID")
         or get_env_value("FEISHU_APP_ID")
         or get_env_value("WECOM_BOT_ID")
@@ -2130,8 +2110,6 @@ def _get_section_config_summary(config: dict, section_key: str) -> Optional[str]
             platforms.append("Email")
         if get_env_value("TWILIO_ACCOUNT_SID"):
             platforms.append("SMS")
-        if get_env_value("WHATSAPP_PHONE_NUMBER_ID"):
-            platforms.append("WhatsApp")
         if get_env_value("DINGTALK_CLIENT_ID"):
             platforms.append("DingTalk")
         if get_env_value("FEISHU_APP_ID"):
@@ -2225,7 +2203,6 @@ _HIGH_IMPACT_KIND_KEYWORDS = {
     "gateway": "⚠ Gateway/messaging — this will configure Hermes to use your OpenClaw messaging channels",
     "telegram": "⚠ Telegram — this will point Hermes at your OpenClaw Telegram bot",
     "discord": "⚠ Discord — this will point Hermes at your OpenClaw Discord bot",
-    "whatsapp": "⚠ WhatsApp — this will point Hermes at your OpenClaw WhatsApp connection",
     "config": "⚠ Config values — OpenClaw settings may not map 1:1 to Hermes equivalents",
     "soul": "⚠ Instruction file — may contain OpenClaw-specific setup/restart procedures",
     "memory": "⚠ Memory/context file — may reference OpenClaw-specific infrastructure",

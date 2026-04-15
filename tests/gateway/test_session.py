@@ -263,22 +263,22 @@ class TestBuildSessionContextPrompt:
         assert "Local" in prompt
         assert "machine running this agent" in prompt
 
-    def test_whatsapp_prompt(self):
+    def test_signal_prompt(self):
         config = GatewayConfig(
             platforms={
-                Platform.WHATSAPP: PlatformConfig(enabled=True, token=""),
+                Platform.SIGNAL: PlatformConfig(enabled=True, token=""),
             },
         )
         source = SessionSource(
-            platform=Platform.WHATSAPP,
-            chat_id="15551234567@s.whatsapp.net",
+            platform=Platform.SIGNAL,
+            chat_id="+15551234567",
             chat_type="dm",
             user_name="Phone User",
         )
         ctx = build_session_context(source, config)
         prompt = build_session_context_prompt(ctx)
 
-        assert "WhatsApp" in prompt or "whatsapp" in prompt.lower()
+        assert "Signal" in prompt or "signal" in prompt.lower()
 
     def test_multi_user_thread_prompt(self):
         """Shared thread sessions show multi-user note instead of single user."""
@@ -584,21 +584,21 @@ class TestWhatsAppDMSessionKeyConsistency:
         s._loaded = True
         return s
 
-    def test_whatsapp_dm_includes_chat_id(self):
+    def test_signal_dm_includes_chat_id(self):
         source = SessionSource(
-            platform=Platform.WHATSAPP,
-            chat_id="15551234567@s.whatsapp.net",
+            platform=Platform.SIGNAL,
+            chat_id="+15551234567",
             chat_type="dm",
             user_name="Phone User",
         )
         key = build_session_key(source)
-        assert key == "agent:main:whatsapp:dm:15551234567@s.whatsapp.net"
+        assert key == "agent:main:signal:dm:+15551234567"
 
     def test_store_delegates_to_build_session_key(self, store):
         """SessionStore._generate_session_key must produce the same result."""
         source = SessionSource(
-            platform=Platform.WHATSAPP,
-            chat_id="15551234567@s.whatsapp.net",
+            platform=Platform.SIGNAL,
+            chat_id="+15551234567",
             chat_type="dm",
             user_name="Phone User",
         )
