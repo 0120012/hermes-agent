@@ -3126,18 +3126,18 @@ class AIAgent:
 
         # Tool-aware behavioral guidance: only inject when the tools are loaded
         tool_guidance = []
-        if "memory" in self.valid_tool_names:
-            tool_guidance.append(MEMORY_GUIDANCE)
-        if "session_search" in self.valid_tool_names:
-            tool_guidance.append(SESSION_SEARCH_GUIDANCE)
+        # if "memory" in self.valid_tool_names:
+        #     tool_guidance.append(MEMORY_GUIDANCE)
+        # if "session_search" in self.valid_tool_names:
+        #     tool_guidance.append(SESSION_SEARCH_GUIDANCE)
         if "skill_manage" in self.valid_tool_names:
             tool_guidance.append(SKILLS_GUIDANCE)
         if tool_guidance:
             prompt_parts.append(" ".join(tool_guidance))
 
-        nous_subscription_prompt = build_nous_subscription_prompt(self.valid_tool_names)
-        if nous_subscription_prompt:
-            prompt_parts.append(nous_subscription_prompt)
+        # nous_subscription_prompt = build_nous_subscription_prompt(self.valid_tool_names)
+        # if nous_subscription_prompt:
+        #     prompt_parts.append(nous_subscription_prompt)
         # Tool-use enforcement: tells the model to actually call tools instead
         # of describing intended actions.  Controlled by config.yaml
         # agent.tool_use_enforcement:
@@ -3160,16 +3160,14 @@ class AIAgent:
                 model_lower = (self.model or "").lower()
                 _inject = any(p in model_lower for p in TOOL_USE_ENFORCEMENT_MODELS)
             if _inject:
-                prompt_parts.append(TOOL_USE_ENFORCEMENT_GUIDANCE)
                 _model_lower = (self.model or "").lower()
-                # Google model operational guidance (conciseness, absolute
-                # paths, parallel tool calls, verify-before-edit, etc.)
-                if "gemini" in _model_lower or "gemma" in _model_lower:
-                    prompt_parts.append(GOOGLE_MODEL_OPERATIONAL_GUIDANCE)
-                # OpenAI GPT/Codex execution discipline (tool persistence,
-                # prerequisite checks, verification, anti-hallucination).
+                # 为什么：模型专用提示词优先，避免专用模型重复叠加通用约束。
                 if "gpt" in _model_lower or "codex" in _model_lower:
                     prompt_parts.append(OPENAI_MODEL_EXECUTION_GUIDANCE)
+                elif "gemini" in _model_lower or "gemma" in _model_lower:
+                    prompt_parts.append(GOOGLE_MODEL_OPERATIONAL_GUIDANCE)
+                else:
+                    prompt_parts.append(TOOL_USE_ENFORCEMENT_GUIDANCE)
 
         # so it can refer the user to them rather than reinventing answers.
 
@@ -3194,28 +3192,29 @@ class AIAgent:
         else:
             skills_prompt = ""
         if skills_prompt:
-            prompt_parts.append(skills_prompt)
+            pass
+            # prompt_parts.append(skills_prompt)
 
-        if not self.skip_context_files:
+        # if not self.skip_context_files:
             # Use TERMINAL_CWD for context file discovery when set (gateway
             # mode).  The gateway process runs from the hermes-agent install
             # dir, so os.getcwd() would pick up the repo's AGENTS.md and
             # other dev files — inflating token usage by ~10k for no benefit.
-            _context_cwd = os.getenv("TERMINAL_CWD") or None
-            context_files_prompt = build_context_files_prompt(
-                cwd=_context_cwd, skip_soul=_soul_loaded)
-            if context_files_prompt:
-                prompt_parts.append(context_files_prompt)
+            # _context_cwd = os.getenv("TERMINAL_CWD") or None
+            # context_files_prompt = build_context_files_prompt(
+            #     cwd=_context_cwd, skip_soul=_soul_loaded)
+            # if context_files_prompt:
+            #     prompt_parts.append(context_files_prompt)
 
         from hermes_time import now as _hermes_now
         now = _hermes_now()
         timestamp_line = f"Conversation started: {now.strftime('%A, %B %d, %Y %I:%M %p')}"
         if self.pass_session_id and self.session_id:
             timestamp_line += f"\nSession ID: {self.session_id}"
-        if self.model:
-            timestamp_line += f"\nModel: {self.model}"
-        if self.provider:
-            timestamp_line += f"\nProvider: {self.provider}"
+        # if self.model:
+        #     timestamp_line += f"\nModel: {self.model}"
+        # if self.provider:
+        #     timestamp_line += f"\nProvider: {self.provider}"
         prompt_parts.append(timestamp_line)
 
         # Alibaba Coding Plan API always returns "glm-4.7" as model name regardless
@@ -7836,6 +7835,14 @@ class AIAgent:
             else:
                 # First turn of a new session — build from scratch.
                 self._cached_system_prompt = self._build_system_prompt(system_message)
+                # 为什么：这里要直接看到首次对话真正发送前的 system prompt，
+                # 调试时必须绕开 logger 和自定义输出通道，直接打印原文。
+                try:
+                    print("\n===== INITIAL SYSTEM PROMPT BEGIN =====")
+                    print(self._cached_system_prompt)
+                    print("===== INITIAL SYSTEM PROMPT END =====\n")
+                except (OSError, ValueError):
+                    pass
                 # Plugin hook: on_session_start
                 # Fired once when a brand-new session is created (not on
                 # continuation).  Plugins can use this to initialise

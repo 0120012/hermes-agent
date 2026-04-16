@@ -166,12 +166,15 @@ SESSION_SEARCH_GUIDANCE = (
 )
 
 SKILLS_GUIDANCE = (
-    "After completing a complex task (5+ tool calls), fixing a tricky error, "
-    "or discovering a non-trivial workflow, save the approach as a "
-    "skill with skill_manage so you can reuse it next time.\n"
-    "When using a skill and finding it outdated, incomplete, or wrong, "
-    "patch it immediately with skill_manage(action='patch') — don't wait to be asked. "
-    "Skills that aren't maintained become liabilities."
+    "When you complete a complex task, fix a tricky problem, or discover a "
+    "non-trivial workflow with clear reuse value, you may suggest to the user "
+    "that this would be worth capturing as a skill. "
+    "Briefly explain why it is valuable and what future scenarios it could help with, "
+    "then explicitly ask whether the user wants you to create the skill.\n"
+    "Do not call skill_manage to create a skill unless the user explicitly confirms. "
+    "If you find that an existing skill is outdated, incomplete, or incorrect, "
+    "first explain the issue to the user and ask whether they want you to patch it. "
+    "Do not patch skills proactively without explicit user confirmation."
 )
 
 TOOL_USE_ENFORCEMENT_GUIDANCE = (
@@ -200,59 +203,39 @@ TOOL_USE_ENFORCEMENT_MODELS = ("gpt", "codex", "gemini", "gemma", "grok")
 OPENAI_MODEL_EXECUTION_GUIDANCE = (
     "# Execution discipline\n"
     "<tool_persistence>\n"
-    "- Use tools whenever they improve correctness, completeness, or grounding.\n"
-    "- Do not stop early when another tool call would materially improve the result.\n"
-    "- If a tool returns empty or partial results, retry with a different query or "
-    "strategy before giving up.\n"
-    "- Keep calling tools until: (1) the task is complete, AND (2) you have verified "
-    "the result.\n"
+    "- Use tools whenever they materially improve correctness, grounding, or completeness.\n"
+    "- Do not stop early when another tool call is needed to complete or verify the task.\n"
+    "- If a tool returns partial or empty results, retry with a better query or another tool before giving up.\n"
     "</tool_persistence>\n"
     "\n"
     "<mandatory_tool_use>\n"
-    "NEVER answer these from memory or mental computation — ALWAYS use a tool:\n"
-    "- Arithmetic, math, calculations → use terminal or execute_code\n"
-    "- Hashes, encodings, checksums → use terminal (e.g. sha256sum, base64)\n"
-    "- Current time, date, timezone → use terminal (e.g. date)\n"
-    "- System state: OS, CPU, memory, disk, ports, processes → use terminal\n"
-    "- File contents, sizes, line counts → use read_file, search_files, or terminal\n"
-    "- Git history, branches, diffs → use terminal\n"
-    "- Current facts (weather, news, versions) → use web_search\n"
-    "Your memory and user profile describe the USER, not the system you are "
-    "running on. The execution environment may differ from what the user profile "
-    "says about their personal setup.\n"
+    "Do not answer these from memory when tools are available:\n"
+    "- Calculations, hashes, encodings, checksums\n"
+    "- Current time, date, timezone\n"
+    "- System state: OS, CPU, memory, disk, ports, processes\n"
+    "- File contents, file size, line count, and git state\n"
+    "- Current facts such as news, weather, versions, or live external status\n"
+    "Your memory describes the user, not necessarily the live execution environment.\n"
     "</mandatory_tool_use>\n"
     "\n"
     "<act_dont_ask>\n"
-    "When a question has an obvious default interpretation, act on it immediately "
-    "instead of asking for clarification. Examples:\n"
-    "- 'Is port 443 open?' → check THIS machine (don't ask 'open where?')\n"
-    "- 'What OS am I running?' → check the live system (don't use user profile)\n"
-    "- 'What time is it?' → run `date` (don't guess)\n"
-    "Only ask for clarification when the ambiguity genuinely changes what tool "
-    "you would call.\n"
+    "- When the user's intent has an obvious default interpretation, act instead of asking a low-value clarification question.\n"
+    "- Ask for clarification only when the ambiguity would materially change the tool choice, scope, or side effects.\n"
     "</act_dont_ask>\n"
     "\n"
     "<prerequisite_checks>\n"
-    "- Before taking an action, check whether prerequisite discovery, lookup, or "
-    "context-gathering steps are needed.\n"
-    "- Do not skip prerequisite steps just because the final action seems obvious.\n"
-    "- If a task depends on output from a prior step, resolve that dependency first.\n"
+    "- Resolve prerequisite lookups before taking dependent actions.\n"
+    "- Do not skip discovery steps when the final action depends on unknown context.\n"
     "</prerequisite_checks>\n"
     "\n"
     "<verification>\n"
-    "Before finalizing your response:\n"
-    "- Correctness: does the output satisfy every stated requirement?\n"
-    "- Grounding: are factual claims backed by tool outputs or provided context?\n"
-    "- Formatting: does the output match the requested format or schema?\n"
-    "- Safety: if the next step has side effects (file writes, commands, API calls), "
-    "confirm scope before executing.\n"
+    "- Before finalizing, verify correctness, grounding, and requested output format.\n"
+    "- If the next step has side effects, confirm scope when needed before executing.\n"
     "</verification>\n"
     "\n"
     "<missing_context>\n"
-    "- If required context is missing, do NOT guess or hallucinate an answer.\n"
-    "- Use the appropriate lookup tool when missing information is retrievable "
-    "(search_files, web_search, read_file, etc.).\n"
-    "- Ask a clarifying question only when the information cannot be retrieved by tools.\n"
+    "- If required context is missing, do not guess.\n"
+    "- Retrieve it with tools when possible; otherwise ask a clarifying question.\n"
     "- If you must proceed with incomplete information, label assumptions explicitly.\n"
     "</missing_context>"
 )
@@ -383,6 +366,8 @@ def build_environment_hints() -> str:
     Returns an empty string when no special environment is detected.
     """
     hints: list[str] = []
+    # 为什么：当前只对 WSL 注入显式环境提示；普通环境不追加内容，
+    # 避免无差别膨胀 system prompt，后续有明确收益时再扩展到其它环境。
     if is_wsl():
         hints.append(WSL_ENVIRONMENT_HINT)
     return "\n\n".join(hints)
@@ -407,15 +392,22 @@ def _skills_prompt_snapshot_path() -> Path:
     return get_hermes_home() / ".skills_prompt_snapshot.json"
 
 
+# 为什么：JSON 快照保留给结构化元数据缓存，渲染后的 XML 调试输出必须分文件，
+# 否则同一路径混用两种格式，后续任何 JSON 读取都会变成脏数据源。
+def _skills_prompt_rendered_path() -> Path:
+    return get_hermes_home() / ".skills_prompt_snapshot.xml"
+
+
 def clear_skills_system_prompt_cache(*, clear_snapshot: bool = False) -> None:
     """Drop the in-process skills prompt cache (and optionally the disk snapshot)."""
     with _SKILLS_PROMPT_CACHE_LOCK:
         _SKILLS_PROMPT_CACHE.clear()
     if clear_snapshot:
-        try:
-            _skills_prompt_snapshot_path().unlink(missing_ok=True)
-        except OSError as e:
-            logger.debug("Could not remove skills prompt snapshot: %s", e)
+        for snapshot_path in (_skills_prompt_snapshot_path(), _skills_prompt_rendered_path()):
+            try:
+                snapshot_path.unlink(missing_ok=True)
+            except OSError as e:
+                logger.debug("Could not remove skills prompt snapshot %s: %s", snapshot_path, e)
 
 
 def _build_skills_manifest(skills_dir: Path) -> dict[str, list[int]]:
@@ -433,20 +425,25 @@ def _build_skills_manifest(skills_dir: Path) -> dict[str, list[int]]:
 
 def _load_skills_snapshot(skills_dir: Path) -> Optional[dict]:
     """Load the disk snapshot if it exists and its manifest still matches."""
-    snapshot_path = _skills_prompt_snapshot_path()
-    if not snapshot_path.exists():
-        return None
-    try:
-        snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if not isinstance(snapshot, dict):
-        return None
-    if snapshot.get("version") != _SKILLS_SNAPSHOT_VERSION:
-        return None
-    if snapshot.get("manifest") != _build_skills_manifest(skills_dir):
-        return None
-    return snapshot
+    # 为什么：skills prompt 主流程已经切到实时扫描 + XML sidecar，
+    # 这里保留旧函数签名仅为兼容，不再实际读取 JSON 快照。
+    #
+    # snapshot_path = _skills_prompt_snapshot_path()
+    # if not snapshot_path.exists():
+    #     return None
+    # try:
+    #     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    # except Exception:
+    #     return None
+    # if not isinstance(snapshot, dict):
+    #     return None
+    # if snapshot.get("version") != _SKILLS_SNAPSHOT_VERSION:
+    #     return None
+    # if snapshot.get("manifest") != _build_skills_manifest(skills_dir):
+    #     return None
+    # return snapshot
+    _ = skills_dir
+    return None
 
 
 def _write_skills_snapshot(
@@ -456,16 +453,20 @@ def _write_skills_snapshot(
     category_descriptions: dict[str, str],
 ) -> None:
     """Persist skill metadata to disk for fast cold-start reuse."""
-    payload = {
-        "version": _SKILLS_SNAPSHOT_VERSION,
-        "manifest": manifest,
-        "skills": skill_entries,
-        "category_descriptions": category_descriptions,
-    }
-    try:
-        atomic_json_write(_skills_prompt_snapshot_path(), payload)
-    except Exception as e:
-        logger.debug("Could not write skills prompt snapshot: %s", e)
+    # 为什么：保留旧 JSON 快照接口定义，避免外部引用炸掉；
+    # 但当前实现不再写 JSON 文件，统一只输出 XML sidecar 供调试查看。
+    #
+    # payload = {
+    #     "version": _SKILLS_SNAPSHOT_VERSION,
+    #     "manifest": manifest,
+    #     "skills": skill_entries,
+    #     "category_descriptions": category_descriptions,
+    # }
+    # try:
+    #     atomic_json_write(_skills_prompt_snapshot_path(), payload)
+    # except Exception as e:
+    #     logger.debug("Could not write skills prompt snapshot: %s", e)
+    _ = (skills_dir, manifest, skill_entries, category_descriptions)
 
 
 def _build_snapshot_entry(
@@ -556,228 +557,57 @@ def build_skills_system_prompt(
     available_tools: "set[str] | None" = None,
     available_toolsets: "set[str] | None" = None,
 ) -> str:
-    """Build a compact skill index for the system prompt.
+    """Build a live XML skills summary directly from skill directories."""
+    from html import escape as _escape_xml
 
-    Two-layer cache:
-      1. In-process LRU dict keyed by (skills_dir, tools, toolsets)
-      2. Disk snapshot (``.skills_prompt_snapshot.json``) validated by
-         mtime/size manifest — survives process restarts
-
-    Falls back to a full filesystem scan when both layers miss.
-
-    External skill directories (``skills.external_dirs`` in config.yaml) are
-    scanned alongside the local ``~/.hermes/skills/`` directory.  External dirs
-    are read-only — they appear in the index but new skills are always created
-    in the local dir.  Local skills take precedence when names collide.
-    """
-    skills_dir = get_skills_dir()
-    external_dirs = get_all_skills_dirs()[1:]  # skip local (index 0)
-
-    if not skills_dir.exists() and not external_dirs:
+    all_dirs = get_all_skills_dirs()
+    scan_dirs = [d for d in all_dirs if d.exists()]
+    if not scan_dirs:
         return ""
 
-    # ── Layer 1: in-process LRU cache ─────────────────────────────────
-    # Include the resolved platform so per-platform disabled-skill lists
-    # produce distinct cache entries (gateway serves multiple platforms).
-    from gateway.session_context import get_session_env
-    _platform_hint = (
-        os.environ.get("HERMES_PLATFORM")
-        or get_session_env("HERMES_SESSION_PLATFORM")
-        or ""
-    )
-    cache_key = (
-        str(skills_dir.resolve()),
-        tuple(str(d) for d in external_dirs),
-        tuple(sorted(str(t) for t in (available_tools or set()))),
-        tuple(sorted(str(ts) for ts in (available_toolsets or set()))),
-        _platform_hint,
-    )
-    with _SKILLS_PROMPT_CACHE_LOCK:
-        cached = _SKILLS_PROMPT_CACHE.get(cache_key)
-        if cached is not None:
-            _SKILLS_PROMPT_CACHE.move_to_end(cache_key)
-            return cached
-
     disabled = get_disabled_skill_names()
+    seen_skill_names: set[str] = set()
+    lines: list[str] = ["<skills>"]
 
-    # ── Layer 2: disk snapshot ────────────────────────────────────────
-    snapshot = _load_skills_snapshot(skills_dir)
-
-    skills_by_category: dict[str, list[tuple[str, str]]] = {}
-    category_descriptions: dict[str, str] = {}
-
-    if snapshot is not None:
-        # Fast path: use pre-parsed metadata from disk
-        for entry in snapshot.get("skills", []):
-            if not isinstance(entry, dict):
-                continue
-            skill_name = entry.get("skill_name") or ""
-            category = entry.get("category") or "general"
-            frontmatter_name = entry.get("frontmatter_name") or skill_name
-            platforms = entry.get("platforms") or []
-            if not skill_matches_platform({"platforms": platforms}):
-                continue
-            if frontmatter_name in disabled or skill_name in disabled:
-                continue
-            if not _skill_should_show(
-                entry.get("conditions") or {},
-                available_tools,
-                available_toolsets,
-            ):
-                continue
-            skills_by_category.setdefault(category, []).append(
-                (skill_name, entry.get("description", ""))
-            )
-        category_descriptions = {
-            str(k): str(v)
-            for k, v in (snapshot.get("category_descriptions") or {}).items()
-        }
-    else:
-        # Cold path: full filesystem scan + write snapshot for next time
-        skill_entries: list[dict] = []
-        for skill_file in iter_skill_index_files(skills_dir, "SKILL.md"):
+    for base_dir in scan_dirs:
+        for skill_file in iter_skill_index_files(base_dir, "SKILL.md"):
             is_compatible, frontmatter, desc = _parse_skill_file(skill_file)
-            entry = _build_snapshot_entry(skill_file, skills_dir, frontmatter, desc)
-            skill_entries.append(entry)
             if not is_compatible:
                 continue
+            entry = _build_snapshot_entry(skill_file, base_dir, frontmatter, desc)
             skill_name = entry["skill_name"]
+            if skill_name in seen_skill_names:
+                continue
             if entry["frontmatter_name"] in disabled or skill_name in disabled:
                 continue
-            if not _skill_should_show(
-                extract_skill_conditions(frontmatter),
-                available_tools,
-                available_toolsets,
-            ):
+
+            conditions = extract_skill_conditions(frontmatter)
+            available = _skill_should_show(conditions, available_tools, available_toolsets)
+            if not available:
                 continue
-            skills_by_category.setdefault(entry["category"], []).append(
-                (skill_name, entry["description"])
+            seen_skill_names.add(skill_name)
+
+            lines.extend(
+                [
+                    f'  <skill available="{str(available).lower()}">',
+                    f"    <name>{_escape_xml(skill_name)}</name>",
+                    f"    <description>{_escape_xml(entry.get('description', ''))}</description>",
+                    f"    <location>{_escape_xml(str(skill_file.parent))}</location>",
+                ]
             )
 
-        # Read category-level DESCRIPTION.md files
-        for desc_file in iter_skill_index_files(skills_dir, "DESCRIPTION.md"):
-            try:
-                content = desc_file.read_text(encoding="utf-8")
-                fm, _ = parse_frontmatter(content)
-                cat_desc = fm.get("description")
-                if not cat_desc:
-                    continue
-                rel = desc_file.relative_to(skills_dir)
-                cat = "/".join(rel.parts[:-1]) if len(rel.parts) > 1 else "general"
-                category_descriptions[cat] = str(cat_desc).strip().strip("'\"")
-            except Exception as e:
-                logger.debug("Could not read skill description %s: %s", desc_file, e)
+            lines.append("  </skill>")
 
-        _write_skills_snapshot(
-            skills_dir,
-            _build_skills_manifest(skills_dir),
-            skill_entries,
-            category_descriptions,
-        )
+    if len(lines) == 1:
+        return ""
 
-    # ── External skill directories ─────────────────────────────────────
-    # Scan external dirs directly (no snapshot caching — they're read-only
-    # and typically small).  Local skills already in skills_by_category take
-    # precedence: we track seen names and skip duplicates from external dirs.
-    seen_skill_names: set[str] = set()
-    for cat_skills in skills_by_category.values():
-        for name, _desc in cat_skills:
-            seen_skill_names.add(name)
-
-    for ext_dir in external_dirs:
-        if not ext_dir.exists():
-            continue
-        for skill_file in iter_skill_index_files(ext_dir, "SKILL.md"):
-            try:
-                is_compatible, frontmatter, desc = _parse_skill_file(skill_file)
-                if not is_compatible:
-                    continue
-                entry = _build_snapshot_entry(skill_file, ext_dir, frontmatter, desc)
-                skill_name = entry["skill_name"]
-                if skill_name in seen_skill_names:
-                    continue
-                if entry["frontmatter_name"] in disabled or skill_name in disabled:
-                    continue
-                if not _skill_should_show(
-                    extract_skill_conditions(frontmatter),
-                    available_tools,
-                    available_toolsets,
-                ):
-                    continue
-                seen_skill_names.add(skill_name)
-                skills_by_category.setdefault(entry["category"], []).append(
-                    (skill_name, entry["description"])
-                )
-            except Exception as e:
-                logger.debug("Error reading external skill %s: %s", skill_file, e)
-
-        # External category descriptions
-        for desc_file in iter_skill_index_files(ext_dir, "DESCRIPTION.md"):
-            try:
-                content = desc_file.read_text(encoding="utf-8")
-                fm, _ = parse_frontmatter(content)
-                cat_desc = fm.get("description")
-                if not cat_desc:
-                    continue
-                rel = desc_file.relative_to(ext_dir)
-                cat = "/".join(rel.parts[:-1]) if len(rel.parts) > 1 else "general"
-                category_descriptions.setdefault(cat, str(cat_desc).strip().strip("'\""))
-            except Exception as e:
-                logger.debug("Could not read external skill description %s: %s", desc_file, e)
-
-    if not skills_by_category:
-        result = ""
-    else:
-        index_lines = []
-        for category in sorted(skills_by_category.keys()):
-            cat_desc = category_descriptions.get(category, "")
-            if cat_desc:
-                index_lines.append(f"  {category}: {cat_desc}")
-            else:
-                index_lines.append(f"  {category}:")
-            # Deduplicate and sort skills within each category
-            seen = set()
-            for name, desc in sorted(skills_by_category[category], key=lambda x: x[0]):
-                if name in seen:
-                    continue
-                seen.add(name)
-                if desc:
-                    index_lines.append(f"    - {name}: {desc}")
-                else:
-                    index_lines.append(f"    - {name}")
-
-        result = (
-            "## Skills (mandatory)\n"
-            "Before replying, scan the skills below. If a skill matches or is even partially relevant "
-            "to your task, you MUST load it with skill_view(name) and follow its instructions. "
-            "Err on the side of loading — it is always better to have context you don't need "
-            "than to miss critical steps, pitfalls, or established workflows. "
-            "Skills contain specialized knowledge — API endpoints, tool-specific commands, "
-            "and proven workflows that outperform general-purpose approaches. Load the skill "
-            "even if you think you could handle the task with basic tools like web_search or terminal. "
-            "Skills also encode the user's preferred approach, conventions, and quality standards "
-            "for tasks like code review, planning, and testing — load them even for tasks you "
-            "already know how to do, because the skill defines how it should be done here.\n"
-            "If a skill has issues, fix it with skill_manage(action='patch').\n"
-            "After difficult/iterative tasks, offer to save as a skill. "
-            "If a skill you loaded was missing steps, had wrong commands, or needed "
-            "pitfalls you discovered, update it before finishing.\n"
-            "\n"
-            "<available_skills>\n"
-            + "\n".join(index_lines) + "\n"
-            "</available_skills>\n"
-            "\n"
-            "Only proceed without loading a skill if genuinely none are relevant to the task."
-        )
-
-    # ── Store in LRU cache ────────────────────────────────────────────
-    with _SKILLS_PROMPT_CACHE_LOCK:
-        _SKILLS_PROMPT_CACHE[cache_key] = result
-        _SKILLS_PROMPT_CACHE.move_to_end(cache_key)
-        while len(_SKILLS_PROMPT_CACHE) > _SKILLS_PROMPT_CACHE_MAX:
-            _SKILLS_PROMPT_CACHE.popitem(last=False)
-
-    return result
+    lines.append("</skills>")
+    # 为什么：保留当前渲染结果，便于直接检查模型实际拿到的 skills 列表。
+    try:
+        _skills_prompt_rendered_path().write_text("\n".join(lines), encoding="utf-8")
+    except Exception as e:
+        logger.debug("Could not write skills prompt snapshot: %s", e)
+    return "\n".join(lines)
 
 
 def build_nous_subscription_prompt(valid_tool_names: "set[str] | None" = None) -> str:

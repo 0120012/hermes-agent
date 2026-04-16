@@ -264,7 +264,21 @@ class TestBuildSkillsSystemPrompt:
         result = build_skills_system_prompt()
         assert "python-debug" in result
         assert "Debug Python scripts" in result
-        assert "available_skills" in result
+        assert "<skills>" in result
+
+    def test_rendered_snapshot_uses_xml_sidecar_file(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        skills_dir = tmp_path / "skills" / "coding" / "python-debug"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "SKILL.md").write_text(
+            "---\nname: python-debug\ndescription: Debug Python scripts\n---\n"
+        )
+
+        result = build_skills_system_prompt()
+
+        assert "<skills>" in result
+        assert (tmp_path / ".skills_prompt_snapshot.xml").exists()
+        assert not (tmp_path / ".skills_prompt_snapshot.json").exists()
 
     def test_deduplicates_skills(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -274,8 +288,7 @@ class TestBuildSkillsSystemPrompt:
             d.mkdir(parents=True, exist_ok=True)
             (d / "SKILL.md").write_text("---\ndescription: Search stuff\n---\n")
         result = build_skills_system_prompt()
-        # "search" should appear only once per category
-        assert result.count("- search") == 1
+        assert result.count("<name>search</name>") == 1
 
     def test_excludes_incompatible_platform_skills(self, monkeypatch, tmp_path):
         """Skills with platforms: [macos] should not appear on Linux."""
@@ -1032,5 +1045,3 @@ class TestOpenAIModelExecutionGuidance:
 # =========================================================================
 # Budget warning history stripping
 # =========================================================================
-
-
