@@ -62,6 +62,8 @@ mini-swe-agent/
 .direnv/
 result
 website/static/api/skills-index.json
+context.md
+uv.lock
 
 #idea
 .DS_Store
