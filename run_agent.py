@@ -7835,14 +7835,6 @@ class AIAgent:
             else:
                 # First turn of a new session — build from scratch.
                 self._cached_system_prompt = self._build_system_prompt(system_message)
-                # 为什么：这里要直接看到首次对话真正发送前的 system prompt，
-                # 调试时必须绕开 logger 和自定义输出通道，直接打印原文。
-                try:
-                    print("\n===== INITIAL SYSTEM PROMPT BEGIN =====")
-                    print(self._cached_system_prompt)
-                    print("===== INITIAL SYSTEM PROMPT END =====\n")
-                except (OSError, ValueError):
-                    pass
                 # Plugin hook: on_session_start
                 # Fired once when a brand-new session is created (not on
                 # continuation).  Plugins can use this to initialise
