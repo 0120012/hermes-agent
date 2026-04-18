@@ -706,6 +706,16 @@ class TestBuildSystemPrompt:
         assert mock_skills.call_args.kwargs["available_toolsets"] == {"web", "skills"}
 
 
+class TestBackgroundSkillReviewPrompt:
+    def test_skill_review_requires_explicit_confirmation(self):
+        assert "explicitly confirmed" in AIAgent._SKILL_REVIEW_PROMPT
+        assert "do not call skill_manage" in AIAgent._SKILL_REVIEW_PROMPT
+
+    def test_combined_review_requires_explicit_confirmation_for_skills(self):
+        assert "explicitly confirmed" in AIAgent._COMBINED_REVIEW_PROMPT
+        assert "do not call skill_manage" in AIAgent._COMBINED_REVIEW_PROMPT
+
+
 class TestToolUseEnforcementConfig:
     """Tests for the agent.tool_use_enforcement config option."""
 
