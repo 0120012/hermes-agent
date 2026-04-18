@@ -848,12 +848,12 @@ class TestInvalidateSystemPrompt:
         agent._invalidate_system_prompt()
         assert agent._cached_system_prompt is None
 
-    def test_reloads_memory_store(self, agent):
+    def test_does_not_touch_legacy_memory_store(self, agent):
         mock_store = MagicMock()
         agent._memory_store = mock_store
         agent._cached_system_prompt = "cached"
         agent._invalidate_system_prompt()
-        mock_store.load_from_disk.assert_called_once()
+        mock_store.load_from_disk.assert_not_called()
 
 
 class TestBuildApiKwargs:
@@ -2386,7 +2386,6 @@ class TestFlushSentinelNotLeaked:
     def test_flush_sentinel_stripped_from_api_messages(self, agent_with_memory_tool):
         """Verify _flush_sentinel is not sent to the API provider."""
         agent = agent_with_memory_tool
-        agent._memory_store = MagicMock()
         agent._memory_flush_min_turns = 1
         agent._user_turn_count = 10
         agent._cached_system_prompt = "system"

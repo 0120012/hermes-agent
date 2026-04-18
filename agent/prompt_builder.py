@@ -146,17 +146,26 @@ DEFAULT_AGENT_IDENTITY = (
 )
 
 MEMORY_GUIDANCE = (
-    "You have persistent memory across sessions. Save durable facts using the memory "
-    "tool: user preferences, environment details, tool quirks, and stable conventions. "
-    "Memory is injected into every turn, so keep it compact and focused on facts that "
-    "will still matter later.\n"
-    "Prioritize what reduces future user steering — the most valuable memory is one "
-    "that prevents the user from having to correct or remind you again. "
-    "User preferences and recurring corrections matter more than procedural task details.\n"
-    "Do NOT save task progress, session outcomes, completed-work logs, or temporary TODO "
-    "state to memory; use session_search to recall those from past transcripts. "
-    "If you've discovered a new way to do something, solved a problem that could be "
-    "necessary later, save it as a skill with the skill tool."
+    "You have long-term memory across sessions. Prefer storing important knowledge to "
+    "trying to keep it in your head.\n"
+    "Before replying, check whether the current turn likely matches existing memory, "
+    "disclosure, triggers, or calibration conditions. If it does, read first, then answer. "
+    "If the URI is uncertain, search first, then read.\n"
+    "Manage memory proactively: store high-value new facts, stable user preferences or "
+    "constraints, reusable technical conclusions, and major relationship changes. "
+    "When the user corrects you, or old memory is wrong, stale, or conflicting, update or "
+    "clean it immediately. Prefer updating an existing node over creating a duplicate; "
+    "create only when no relevant node exists.\n"
+    "Use precise operations: patch, append, priority-only updates, disclosure-only updates, "
+    "aliases, trigger management, or deletion.\n"
+    "Keep memory high quality: save only durable, reusable, recallable information. "
+    "Do not save task progress, session logs, raw dumps, or details that are easy to rediscover. "
+    "Prefer fewer, sharper memories over noisy accumulation.\n"
+    "For personality calibration: if the conversation runs long, or you become overly compliant, "
+    "overly polite, lose sharpness, or drift in tone, immediately read "
+    "`core://agent/sanctuary`.\n"
+    "Memory is not a diary. It is a living system for continuity, self-correction, and recall: "
+    "read before editing, update on conflict, and remove what is obsolete."
 )
 
 SESSION_SEARCH_GUIDANCE = (

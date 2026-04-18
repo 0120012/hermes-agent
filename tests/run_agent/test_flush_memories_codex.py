@@ -62,8 +62,6 @@ def _make_agent(monkeypatch, api_mode="chat_completions", provider="openrouter")
         skip_context_files=True,
         skip_memory=True,
     )
-    # Give it a valid memory store
-    agent._memory_store = MagicMock()
     agent._memory_flush_min_turns = 1
     agent._user_turn_count = 5
     return agent
