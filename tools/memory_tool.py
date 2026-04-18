@@ -439,42 +439,47 @@ class MemoryStore:
 def memory_tool(
     action: str,
     target: str = "memory",
+    uri: str = None,
+    parent_uri: str = None,
+    query: str = None,
+    domain: str = None,
+    limit: int = 10,
     content: str = None,
     old_text: str = None,
+    priority: int = None,
+    title: str = None,
+    disclosure: str = None,
+    new_uri: str = None,
+    target_uri: str = None,
+    add: Optional[List[str]] = None,
+    remove: Optional[List[str]] = None,
     store: Optional[MemoryStore] = None,
+    **_ignored: Any,
 ) -> str:
     """
-    Single entry point for the memory tool. Dispatches to MemoryStore methods.
+    Single entry point for the memory tool.
 
     Returns JSON string with results.
     """
-    if store is None:
-        return tool_error("Memory is not available. It may be disabled in config or this environment.", success=False)
-
-    if target not in ("memory", "user"):
-        return tool_error(f"Invalid target '{target}'. Use 'memory' or 'user'.", success=False)
-
-    if action == "add":
-        if not content:
-            return tool_error("Content is required for 'add' action.", success=False)
-        result = store.add(target, content)
-
-    elif action == "replace":
-        if not old_text:
-            return tool_error("old_text is required for 'replace' action.", success=False)
-        if not content:
-            return tool_error("content is required for 'replace' action.", success=False)
-        result = store.replace(target, old_text, content)
-
-    elif action == "remove":
-        if not old_text:
-            return tool_error("old_text is required for 'remove' action.", success=False)
-        result = store.remove(target, old_text)
-
-    else:
-        return tool_error(f"Unknown action '{action}'. Use: add, replace, remove", success=False)
-
-    return json.dumps(result, ensure_ascii=False)
+    # Why：统一 `memory` 前台入口，把旧 file-backed 语义切到 Nocturne MCP，后续主动记忆只需要学一个工具名。
+    required = {"read": ("uri",), "search": ("query",), "add": ("parent_uri", "content", "priority"), "remove": ("uri",), "add_alias": ("new_uri", "target_uri"), "manage_triggers": ("uri",), "replace": ("uri", "old_text", "content"), "append": ("uri", "content"), "set_priority": ("uri", "priority"), "set_disclosure": ("uri", "disclosure")}
+    values = {"uri": uri, "parent_uri": parent_uri, "query": query, "content": content, "priority": priority, "new_uri": new_uri, "target_uri": target_uri, "old_text": old_text, "disclosure": disclosure}
+    routes = {"read": ("mcp_nocturne_memory_read_memory", {"uri": uri}), "search": ("mcp_nocturne_memory_search_memory", {"query": query, "domain": domain, "limit": 10 if not limit or limit <= 0 else limit}), "add": ("mcp_nocturne_memory_create_memory", {"parent_uri": parent_uri, "content": content, "priority": priority, "title": title, "disclosure": disclosure}), "remove": ("mcp_nocturne_memory_delete_memory", {"uri": uri}), "add_alias": ("mcp_nocturne_memory_add_alias", {"new_uri": new_uri, "target_uri": target_uri, "priority": 0 if priority is None else priority, "disclosure": disclosure}), "manage_triggers": ("mcp_nocturne_memory_manage_triggers", {"uri": uri, "add": add, "remove": remove}), "replace": ("mcp_nocturne_memory_patch_memory", {"uri": uri, "old_string": old_text, "new_string": content}), "append": ("mcp_nocturne_memory_append_memory", {"uri": uri, "append": content}), "set_priority": ("mcp_nocturne_memory_update_memory_priority", {"uri": uri, "priority": priority}), "set_disclosure": ("mcp_nocturne_memory_update_memory_disclosure", {"uri": uri, "disclosure": disclosure})}
+    if not action:
+        return tool_error("Missing action.", success=False, retryable=True)
+    if action not in routes:
+        return tool_error("Invalid action.", success=False, retryable=False)
+    if action == "manage_triggers" and not add and not remove:
+        return tool_error("Missing trigger operation.", success=False, retryable=True)
+    if action == "manage_triggers" and add and remove:
+        return tool_error("Conflicting trigger operation.", success=False, retryable=False)
+    missing = next((name for name in required[action] if values.get(name) in (None, "", [])), None)
+    if missing:
+        return tool_error(f"Missing {missing}.", success=False, retryable=True)
+    tool_name, payload = routes[action]
+    if registry.get_schema(tool_name) is None:
+        return tool_error(f"Nocturne MCP tool unavailable: {tool_name}.", success=False)
+    return registry.dispatch(tool_name, payload)
 
 
 def check_memory_requirements() -> bool:
@@ -489,51 +494,37 @@ def check_memory_requirements() -> bool:
 MEMORY_SCHEMA = {
     "name": "memory",
     "description": (
-        "Save durable information to persistent memory that survives across sessions. "
-        "Memory is injected into future turns, so keep it compact and focused on facts "
-        "that will still matter later.\n\n"
-        "WHEN TO SAVE (do this proactively, don't wait to be asked):\n"
-        "- User corrects you or says 'remember this' / 'don't do that again'\n"
-        "- User shares a preference, habit, or personal detail (name, role, timezone, coding style)\n"
-        "- You discover something about the environment (OS, installed tools, project structure)\n"
-        "- You learn a convention, API quirk, or workflow specific to this user's setup\n"
-        "- You identify a stable fact that will be useful again in future sessions\n\n"
-        "PRIORITY: User preferences and corrections > environment facts > procedural knowledge. "
-        "The most valuable memory prevents the user from having to repeat themselves.\n\n"
-        "Do NOT save task progress, session outcomes, completed-work logs, or temporary TODO "
-        "state to memory; use session_search to recall those from past transcripts.\n"
-        "If you've discovered a new way to do something, solved a problem that could be "
-        "necessary later, save it as a skill with the skill tool.\n\n"
-        "TWO TARGETS:\n"
-        "- 'user': who the user is -- name, role, preferences, communication style, pet peeves\n"
-        "- 'memory': your notes -- environment facts, project conventions, tool quirks, lessons learned\n\n"
-        "ACTIONS: add (new entry), replace (update existing -- old_text identifies it), "
-        "remove (delete -- old_text identifies it).\n\n"
-        "SKIP: trivial/obvious info, things easily re-discovered, raw data dumps, and temporary task state."
+        "Canonical entrypoint for the Nocturne memory MCP. Use this proactively for durable "
+        "cross-session memory, but always provide explicit URI-based location fields.\n\n"
+        "Actions: read, search, add, remove, add_alias, manage_triggers, replace, append, "
+        "set_priority, set_disclosure.\n"
+        "Use `uri` for read/remove/replace/append/set_priority/set_disclosure/manage_triggers, "
+        "`parent_uri` for add, and `query` for search. Do not guess paths."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["add", "replace", "remove"],
+                "enum": ["read", "search", "add", "remove", "add_alias", "manage_triggers", "replace", "append", "set_priority", "set_disclosure"],
                 "description": "The action to perform."
             },
-            "target": {
-                "type": "string",
-                "enum": ["memory", "user"],
-                "description": "Which memory store: 'memory' for personal notes, 'user' for user profile."
-            },
-            "content": {
-                "type": "string",
-                "description": "The entry content. Required for 'add' and 'replace'."
-            },
-            "old_text": {
-                "type": "string",
-                "description": "Short unique substring identifying the entry to replace or remove."
-            },
+            "uri": {"type": "string", "description": "Full memory URI."},
+            "parent_uri": {"type": "string", "description": "Parent URI used when creating a node."},
+            "query": {"type": "string", "description": "Keyword query for memory search."},
+            "domain": {"type": "string", "description": "Optional domain filter for search."},
+            "limit": {"type": "integer", "description": "Max search results.", "default": 10},
+            "content": {"type": "string", "description": "Body for add/replace or appended content for append."},
+            "old_text": {"type": "string", "description": "Existing unique fragment to replace during replace."},
+            "priority": {"type": "integer", "description": "Relative memory priority."},
+            "title": {"type": "string", "description": "Optional slug-like title for add."},
+            "disclosure": {"type": "string", "description": "Single trigger scenario for add/set_disclosure/add_alias."},
+            "new_uri": {"type": "string", "description": "Alias URI to create."},
+            "target_uri": {"type": "string", "description": "Existing URI the alias points to."},
+            "add": {"type": "array", "items": {"type": "string"}, "description": "Trigger words to bind."},
+            "remove": {"type": "array", "items": {"type": "string"}, "description": "Trigger words to unbind."},
         },
-        "required": ["action", "target"],
+        "required": ["action"],
     },
 }
 
@@ -545,16 +536,8 @@ registry.register(
     name="memory",
     toolset="memory",
     schema=MEMORY_SCHEMA,
-    handler=lambda args, **kw: memory_tool(
-        action=args.get("action", ""),
-        target=args.get("target", "memory"),
-        content=args.get("content"),
-        old_text=args.get("old_text"),
-        store=kw.get("store")),
+    handler=lambda args, **kw: memory_tool(**args),
     check_fn=check_memory_requirements,
     emoji="🧠",
 )
-
-
-
 

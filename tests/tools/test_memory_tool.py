@@ -18,13 +18,11 @@ from tools.memory_tool import (
 # =========================================================================
 
 class TestMemorySchema:
-    def test_discourages_diary_style_task_logs(self):
+    def test_describes_nocturne_adapter_contract(self):
         description = MEMORY_SCHEMA["description"]
-        assert "Do NOT save task progress" in description
-        assert "session_search" in description
-        assert "like a diary" not in description
-        assert "temporary task state" in description
-        assert ">80%" not in description
+        assert "Canonical entrypoint for the Nocturne memory MCP" in description
+        assert "cross-session memory" in description
+        assert "Do not guess paths." in description
 
 
 # =========================================================================
@@ -234,27 +232,38 @@ class TestMemoryStoreSnapshot:
 # =========================================================================
 
 class TestMemoryToolDispatcher:
-    def test_no_store_returns_error(self):
+    def test_add_requires_parent_uri(self):
         result = json.loads(memory_tool(action="add", content="test"))
         assert result["success"] is False
-        assert "not available" in result["error"]
+        assert result["retryable"] is True
+        assert result["error"] == "Missing parent_uri."
 
-    def test_invalid_target(self, store):
+    def test_legacy_target_does_not_bypass_parent_uri_validation(self, store):
         result = json.loads(memory_tool(action="add", target="invalid", content="x", store=store))
         assert result["success"] is False
+        assert result["retryable"] is True
+        assert result["error"] == "Missing parent_uri."
 
     def test_unknown_action(self, store):
         result = json.loads(memory_tool(action="unknown", store=store))
         assert result["success"] is False
+        assert result["retryable"] is False
+        assert result["error"] == "Invalid action."
 
-    def test_add_via_tool(self, store):
+    def test_add_without_parent_uri_fails_before_dispatch(self, store):
         result = json.loads(memory_tool(action="add", target="memory", content="via tool", store=store))
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["retryable"] is True
+        assert result["error"] == "Missing parent_uri."
 
-    def test_replace_requires_old_text(self, store):
+    def test_replace_requires_uri_before_old_text(self, store):
         result = json.loads(memory_tool(action="replace", content="new", store=store))
         assert result["success"] is False
+        assert result["retryable"] is True
+        assert result["error"] == "Missing uri."
 
-    def test_remove_requires_old_text(self, store):
+    def test_remove_requires_uri_before_old_text(self, store):
         result = json.loads(memory_tool(action="remove", store=store))
         assert result["success"] is False
+        assert result["retryable"] is True
+        assert result["error"] == "Missing uri."

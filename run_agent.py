@@ -1121,10 +1121,6 @@ class AIAgent:
         except Exception:
             _agent_cfg = {}
 
-        # Persistent memory (MEMORY.md + USER.md) -- loaded from disk
-        self._memory_store = None
-        self._memory_enabled = False
-        self._user_profile_enabled = False
         self._memory_nudge_interval = 10
         self._memory_flush_min_turns = 6
         self._turns_since_memory = 0
@@ -1132,17 +1128,9 @@ class AIAgent:
         if not skip_memory:
             try:
                 mem_config = _agent_cfg.get("memory", {})
-                self._memory_enabled = mem_config.get("memory_enabled", False)
-                self._user_profile_enabled = mem_config.get("user_profile_enabled", False)
                 self._memory_nudge_interval = int(mem_config.get("nudge_interval", 10))
                 self._memory_flush_min_turns = int(mem_config.get("flush_min_turns", 6))
-                if self._memory_enabled or self._user_profile_enabled:
-                    from tools.memory_tool import MemoryStore
-                    self._memory_store = MemoryStore(
-                        memory_char_limit=mem_config.get("memory_char_limit", 2200),
-                        user_char_limit=mem_config.get("user_char_limit", 1375),
-                    )
-                    self._memory_store.load_from_disk()
+                # Why：旧 file-backed memory 已废弃；这里只保留触发与节流配置，不再初始化旧存储后端。
             except Exception:
                 pass  # Memory is optional -- don't break agent init
         
@@ -2180,9 +2168,6 @@ class AIAgent:
                         platform=self.platform,
                         provider=self.provider,
                     )
-                    review_agent._memory_store = self._memory_store
-                    review_agent._memory_enabled = self._memory_enabled
-                    review_agent._user_profile_enabled = self._user_profile_enabled
                     review_agent._memory_nudge_interval = 0
                     review_agent._skill_nudge_interval = 0
 
@@ -3127,8 +3112,8 @@ class AIAgent:
 
         # Tool-aware behavioral guidance: only inject when the tools are loaded
         tool_guidance = []
-        # if "memory" in self.valid_tool_names:
-        #     tool_guidance.append(MEMORY_GUIDANCE)
+        if "memory" in self.valid_tool_names:
+            tool_guidance.append(MEMORY_GUIDANCE)
         # if "session_search" in self.valid_tool_names:
         #     tool_guidance.append(SESSION_SEARCH_GUIDANCE)
         if "skill_manage" in self.valid_tool_names:
@@ -3240,12 +3225,12 @@ class AIAgent:
         if platform_key in PLATFORM_HINTS:
             prompt_parts.append(PLATFORM_HINTS[platform_key])
 
-        if _soul_loaded:
-            prompt_parts.append(
-                "Then immediately run `mcp_nocturne_memory_$profile.read_memory(\"system://boot\")` "
-                "(replace `$profile` with the active profile name), read the full output carefully, "
-                "and follow it before taking any other action."
-            )
+        # if _soul_loaded:
+        #     prompt_parts.append(
+        #         "Then immediately run `mcp_nocturne_memory_$profile.read_memory(\"system://boot\")` "
+        #         "(replace `$profile` with the active profile name), read the full output carefully, "
+        #         "and follow it before taking any other action."
+        #     )
 
         return "\n\n".join(p.strip() for p in prompt_parts if p.strip())
 
@@ -3413,12 +3398,9 @@ class AIAgent:
         """
         Invalidate the cached system prompt, forcing a rebuild on the next turn.
         
-        Called after context compression events. Also reloads memory from disk
-        so the rebuilt prompt captures any writes from this session.
+        Called after context compression events.
         """
         self._cached_system_prompt = None
-        if self._memory_store:
-            self._memory_store.load_from_disk()
 
     def _responses_tools(self, tools: Optional[List[Dict[str, Any]]] = None) -> Optional[List[Dict[str, Any]]]:
         """Convert chat-completions tool schemas to Responses function-tool schemas."""
@@ -6564,7 +6546,7 @@ class AIAgent:
         """
         if self._memory_flush_min_turns == 0 and min_turns is None:
             return
-        if "memory" not in self.valid_tool_names or not self._memory_store:
+        if "memory" not in self.valid_tool_names:
             return
         effective_min = min_turns if min_turns is not None else self._memory_flush_min_turns
         if self._user_turn_count < effective_min:
@@ -6684,14 +6666,9 @@ class AIAgent:
                 if tc.function.name == "memory":
                     try:
                         args = json.loads(tc.function.arguments)
-                        flush_target = args.get("target", "memory")
                         from tools.memory_tool import memory_tool as _memory_tool
                         _memory_tool(
-                            action=args.get("action"),
-                            target=flush_target,
-                            content=args.get("content"),
-                            old_text=args.get("old_text"),
-                            store=self._memory_store,
+                            **args,
                         )
                         if not self.quiet_mode:
                             print(f"  🧠 Memory flush: saved to {args.get('target', 'memory')}")
@@ -6876,11 +6853,7 @@ class AIAgent:
             target = function_args.get("target", "memory")
             from tools.memory_tool import memory_tool as _memory_tool
             result = _memory_tool(
-                action=function_args.get("action"),
-                target=target,
-                content=function_args.get("content"),
-                old_text=function_args.get("old_text"),
-                store=self._memory_store,
+                **function_args,
             )
             # Bridge: notify external memory provider of built-in memory writes
             if self._memory_manager and function_args.get("action") in ("add", "replace"):
@@ -7251,11 +7224,7 @@ class AIAgent:
                 target = function_args.get("target", "memory")
                 from tools.memory_tool import memory_tool as _memory_tool
                 function_result = _memory_tool(
-                    action=function_args.get("action"),
-                    target=target,
-                    content=function_args.get("content"),
-                    old_text=function_args.get("old_text"),
-                    store=self._memory_store,
+                    **function_args,
                 )
                 tool_duration = time.time() - tool_start_time
                 if self._should_emit_quiet_tool_messages():
@@ -7792,8 +7761,7 @@ class AIAgent:
         # how many tool iterations THIS turn used.
         _should_review_memory = False
         if (self._memory_nudge_interval > 0
-                and "memory" in self.valid_tool_names
-                and self._memory_store):
+                and "memory" in self.valid_tool_names):
             self._turns_since_memory += 1
             if self._turns_since_memory >= self._memory_nudge_interval:
                 _should_review_memory = True
