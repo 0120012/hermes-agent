@@ -192,17 +192,23 @@ class TestSessionSearch:
         assert result["success"] is False
         assert "not available" in result["error"].lower()
 
-    def test_empty_query_returns_error(self):
+    def test_empty_query_returns_recent_sessions(self):
         from tools.session_search_tool import session_search
-        mock_db = object()
+        from unittest.mock import MagicMock
+        mock_db = MagicMock()
+        mock_db.list_sessions_rich.return_value = []
         result = json.loads(session_search(query="", db=mock_db))
-        assert result["success"] is False
+        assert result["success"] is True
+        assert result["mode"] == "recent"
 
-    def test_whitespace_query_returns_error(self):
+    def test_whitespace_query_returns_recent_sessions(self):
         from tools.session_search_tool import session_search
-        mock_db = object()
+        from unittest.mock import MagicMock
+        mock_db = MagicMock()
+        mock_db.list_sessions_rich.return_value = []
         result = json.loads(session_search(query="   ", db=mock_db))
-        assert result["success"] is False
+        assert result["success"] is True
+        assert result["mode"] == "recent"
 
     def test_current_session_excluded(self):
         """session_search should never return the current session."""
@@ -226,8 +232,8 @@ class TestSessionSearch:
         assert result["count"] == 0
         assert result["results"] == []
 
-    def test_current_session_excluded_keeps_others(self):
-        """Other sessions should still be returned when current is excluded."""
+    def test_keyword_search_stays_local_and_keeps_response_shape(self):
+        """Keyword mode should not fan out to LLM summarization or full-session reads."""
         from unittest.mock import MagicMock
         from tools.session_search_tool import session_search
 
@@ -237,29 +243,32 @@ class TestSessionSearch:
 
         mock_db.search_messages.return_value = [
             {"session_id": current_sid, "content": "match 1", "source": "cli",
-             "session_started": 1709500000, "model": "test"},
+             "session_started": 1709500000, "model": "test", "snippet": "match 1", "context": []},
             {"session_id": other_sid, "content": "match 2", "source": "telegram",
-             "session_started": 1709400000, "model": "test"},
+             "session_started": 1709400000, "model": "test",
+             "snippet": "match 2",
+             "context": [{"role": "assistant", "content": "hi there"}]},
         ]
         mock_db.get_session.return_value = {"parent_session_id": None}
-        mock_db.get_messages_as_conversation.return_value = [
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "hi there"},
-        ]
 
-        # Mock async_call_llm to raise RuntimeError → summarizer returns None
         from unittest.mock import AsyncMock, patch as _patch
         with _patch("tools.session_search_tool.async_call_llm",
-                     new_callable=AsyncMock,
-                     side_effect=RuntimeError("no provider")):
+                     new_callable=AsyncMock) as mock_llm:
             result = json.loads(session_search(
                 query="test", db=mock_db, current_session_id=current_sid,
             ))
 
         assert result["success"] is True
-        # Current session should be skipped, only other_sid should appear
+        assert result["count"] == 1
         assert result["sessions_searched"] == 1
         assert current_sid not in [r.get("session_id") for r in result.get("results", [])]
+        assert other_sid in [r.get("session_id") for r in result.get("results", [])]
+        assert "summary" in result["results"][0]
+        assert "count" in result
+        assert "results" in result
+        assert "sessions_searched" in result
+        mock_llm.assert_not_called()
+        mock_db.get_messages_as_conversation.assert_not_called()
 
     def test_current_child_session_excludes_parent_lineage(self):
         """Compression/delegation parents should be excluded for the active child session."""
@@ -318,3 +327,16 @@ class TestSessionSearch:
         assert result["count"] == 0
         assert result["results"] == []
         assert result["sessions_searched"] == 0
+
+    def test_non_positive_limit_clamps_to_one_for_recent_sessions(self):
+        from unittest.mock import MagicMock
+        from tools.session_search_tool import session_search
+
+        mock_db = MagicMock()
+        mock_db.list_sessions_rich.return_value = []
+
+        result = json.loads(session_search(query="", limit=0, db=mock_db))
+
+        assert result["success"] is True
+        mock_db.list_sessions_rich.assert_called_once()
+        assert mock_db.list_sessions_rich.call_args.kwargs["limit"] == 6

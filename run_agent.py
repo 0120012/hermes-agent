@@ -2123,8 +2123,8 @@ class AIAgent:
         "Focus on: was a non-trivial approach used to complete a task that required trial "
         "and error, or changing course due to experiential findings along the way, or did "
         "the user expect or desire a different method or outcome?\n\n"
-        "If a relevant skill already exists, update it with what you learned. "
-        "Otherwise, create a new skill if the approach is reusable.\n"
+        "Only create or update a skill if the user explicitly confirmed in the conversation "
+        "that they want you to do so. Otherwise, do not call skill_manage.\n"
         "If nothing is worth saving, just say 'Nothing to save.' and stop."
     )
 
@@ -2136,8 +2136,9 @@ class AIAgent:
         "If so, save using the memory tool.\n\n"
         "**Skills**: Was a non-trivial approach used to complete a task that required trial "
         "and error, or changing course due to experiential findings along the way, or did "
-        "the user expect or desire a different method or outcome? If a relevant skill "
-        "already exists, update it. Otherwise, create a new one if the approach is reusable.\n\n"
+        "the user expect or desire a different method or outcome? Only create or update a "
+        "skill if the user explicitly confirmed in the conversation that they want you to do "
+        "so. Otherwise, do not call skill_manage.\n\n"
         "Only act if there's something genuinely worth saving. "
         "If nothing stands out, just say 'Nothing to save.' and stop."
     )
