@@ -307,6 +307,15 @@ def get_tool_definitions(
     # descriptions that don't actually exist, and hallucinates calls to them.
     available_tool_names = {t["function"]["name"] for t in filtered_tools}
 
+    # Hide raw Nocturne MCP tools when the canonical memory tool is available.
+    # Why：对模型只保留一个稳定的记忆入口，避免它在 `memory` 和裸 `mcp_nocturne_memory_*` 之间摇摆。
+    if "memory" in available_tool_names:
+        filtered_tools = [
+            t for t in filtered_tools
+            if not t["function"]["name"].startswith("mcp_nocturne_memory_")
+        ]
+        available_tool_names = {t["function"]["name"] for t in filtered_tools}
+
     # Rebuild execute_code schema to only list sandbox tools that are actually
     # available.  Without this, the model sees "web_search is available in
     # execute_code" even when the API key isn't configured or the toolset is

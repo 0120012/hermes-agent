@@ -3225,12 +3225,10 @@ class AIAgent:
         if platform_key in PLATFORM_HINTS:
             prompt_parts.append(PLATFORM_HINTS[platform_key])
 
-        # if _soul_loaded:
-        #     prompt_parts.append(
-        #         "Then immediately run `mcp_nocturne_memory_$profile.read_memory(\"system://boot\")` "
-        #         "(replace `$profile` with the active profile name), read the full output carefully, "
-        #         "and follow it before taking any other action."
-        #     )
+        if _soul_loaded:
+            prompt_parts.append(
+               "Then immediately run `memory(action=\"read\", uri=\"system://boot\")` "
+            )
 
         return "\n\n".join(p.strip() for p in prompt_parts if p.strip())
 
@@ -7804,6 +7802,12 @@ class AIAgent:
             else:
                 # First turn of a new session — build from scratch.
                 self._cached_system_prompt = self._build_system_prompt(system_message)
+                try:
+                    print("\n===== INITIAL SYSTEM PROMPT BEGIN =====")
+                    print(self._cached_system_prompt)
+                    print("===== INITIAL SYSTEM PROMPT END =====\n")
+                except (OSError, ValueError):
+                    pass
                 # Plugin hook: on_session_start
                 # Fired once when a brand-new session is created (not on
                 # continuation).  Plugins can use this to initialise
