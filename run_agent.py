@@ -2186,23 +2186,11 @@ class AIAgent:
                         data = json.loads(msg.get("content", "{}"))
                     except (json.JSONDecodeError, TypeError):
                         continue
-                    if not data.get("success"):
+                    if data.get("success") is False or data.get("error"):
                         continue
-                    message = data.get("message", "")
-                    target = data.get("target", "")
-                    if "created" in message.lower():
-                        actions.append(message)
-                    elif "updated" in message.lower():
-                        actions.append(message)
-                    elif "added" in message.lower() or (target and "add" in message.lower()):
-                        label = "Memory" if target == "memory" else "User profile" if target == "user" else target
-                        actions.append(f"{label} updated")
-                    elif "Entry added" in message:
-                        label = "Memory" if target == "memory" else "User profile" if target == "user" else target
-                        actions.append(f"{label} updated")
-                    elif "removed" in message.lower() or "replaced" in message.lower():
-                        label = "Memory" if target == "memory" else "User profile" if target == "user" else target
-                        actions.append(f"{label} updated")
+                    message = str(data.get("message") or data.get("result") or "").strip()
+                    if message:
+                        actions.append(message.splitlines()[0])
 
                 if actions:
                     summary = " · ".join(dict.fromkeys(actions))

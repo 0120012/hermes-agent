@@ -438,7 +438,7 @@ class MemoryStore:
 
 def memory_tool(
     action: str,
-    target: str = "memory",
+    target: str = None,
     uri: str = None,
     parent_uri: str = None,
     query: str = None,
@@ -462,9 +462,19 @@ def memory_tool(
     Returns JSON string with results.
     """
     # Why：统一 `memory` 前台入口，把旧 file-backed 语义切到 Nocturne MCP，后续主动记忆只需要学一个工具名。
+    if target not in (None, ""):
+        return tool_error("Legacy parameter 'target' is no longer supported. Use uri or parent_uri.", success=False, retryable=False)
+    if store is not None:
+        return tool_error("Legacy parameter 'store' is no longer supported.", success=False, retryable=False)
+    if _ignored:
+        return tool_error(
+            f"Unsupported memory parameters: {', '.join(sorted(_ignored))}.",
+            success=False,
+            retryable=False,
+        )
     required = {"read": ("uri",), "search": ("query",), "add": ("parent_uri", "content", "priority"), "remove": ("uri",), "add_alias": ("new_uri", "target_uri"), "manage_triggers": ("uri",), "replace": ("uri", "old_text", "content"), "append": ("uri", "content"), "set_priority": ("uri", "priority"), "set_disclosure": ("uri", "disclosure")}
     values = {"uri": uri, "parent_uri": parent_uri, "query": query, "content": content, "priority": priority, "new_uri": new_uri, "target_uri": target_uri, "old_text": old_text, "disclosure": disclosure}
-    routes = {"read": ("mcp_nocturne_memory_read_memory", {"uri": uri}), "search": ("mcp_nocturne_memory_search_memory", {"query": query, "domain": domain, "limit": 10 if not limit or limit <= 0 else limit}), "add": ("mcp_nocturne_memory_create_memory", {"parent_uri": parent_uri, "content": content, "priority": priority, "title": title, "disclosure": disclosure}), "remove": ("mcp_nocturne_memory_delete_memory", {"uri": uri}), "add_alias": ("mcp_nocturne_memory_add_alias", {"new_uri": new_uri, "target_uri": target_uri, "priority": 0 if priority is None else priority, "disclosure": disclosure}), "manage_triggers": ("mcp_nocturne_memory_manage_triggers", {"uri": uri, "add": add, "remove": remove}), "replace": ("mcp_nocturne_memory_patch_memory", {"uri": uri, "old_string": old_text, "new_string": content}), "append": ("mcp_nocturne_memory_append_memory", {"uri": uri, "append": content}), "set_priority": ("mcp_nocturne_memory_update_memory_priority", {"uri": uri, "priority": priority}), "set_disclosure": ("mcp_nocturne_memory_update_memory_disclosure", {"uri": uri, "disclosure": disclosure})}
+    routes = {"read": ("mcp_nocturne_memory_read_memory", {"uri": uri}), "search": ("mcp_nocturne_memory_search_memory", {"query": query, "domain": domain, "limit": 10 if not limit or limit <= 0 else limit}), "add": ("mcp_nocturne_memory_create_memory", {"parent_uri": parent_uri, "content": content, "priority": priority, "title": title, "disclosure": disclosure}), "remove": ("mcp_nocturne_memory_delete_memory", {"uri": uri}), "add_alias": ("mcp_nocturne_memory_add_alias", {"new_uri": new_uri, "target_uri": target_uri, "priority": 3 if priority is None else priority, "disclosure": disclosure}), "manage_triggers": ("mcp_nocturne_memory_manage_triggers", {"uri": uri, "add": add, "remove": remove}), "replace": ("mcp_nocturne_memory_patch_memory", {"uri": uri, "old_string": old_text, "new_string": content}), "append": ("mcp_nocturne_memory_append_memory", {"uri": uri, "append": content}), "set_priority": ("mcp_nocturne_memory_update_memory_priority", {"uri": uri, "priority": priority}), "set_disclosure": ("mcp_nocturne_memory_update_memory_disclosure", {"uri": uri, "disclosure": disclosure})}
     if not action:
         return tool_error("Missing action.", success=False, retryable=True)
     if action not in routes:
@@ -540,4 +550,3 @@ registry.register(
     check_fn=check_memory_requirements,
     emoji="🧠",
 )
-

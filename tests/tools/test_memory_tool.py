@@ -238,32 +238,38 @@ class TestMemoryToolDispatcher:
         assert result["retryable"] is True
         assert result["error"] == "Missing parent_uri."
 
-    def test_legacy_target_does_not_bypass_parent_uri_validation(self, store):
+    def test_legacy_target_is_rejected(self, store):
         result = json.loads(memory_tool(action="add", target="invalid", content="x", store=store))
         assert result["success"] is False
-        assert result["retryable"] is True
-        assert result["error"] == "Missing parent_uri."
+        assert result["retryable"] is False
+        assert result["error"] == "Legacy parameter 'target' is no longer supported. Use uri or parent_uri."
 
-    def test_unknown_action(self, store):
-        result = json.loads(memory_tool(action="unknown", store=store))
+    def test_legacy_store_is_rejected(self, store):
+        result = json.loads(memory_tool(action="read", uri="core://agent/test", store=store))
+        assert result["success"] is False
+        assert result["retryable"] is False
+        assert result["error"] == "Legacy parameter 'store' is no longer supported."
+
+    def test_unknown_action(self):
+        result = json.loads(memory_tool(action="unknown"))
         assert result["success"] is False
         assert result["retryable"] is False
         assert result["error"] == "Invalid action."
 
-    def test_add_without_parent_uri_fails_before_dispatch(self, store):
-        result = json.loads(memory_tool(action="add", target="memory", content="via tool", store=store))
+    def test_add_without_parent_uri_fails_before_dispatch(self):
+        result = json.loads(memory_tool(action="add", content="via tool"))
         assert result["success"] is False
         assert result["retryable"] is True
         assert result["error"] == "Missing parent_uri."
 
-    def test_replace_requires_uri_before_old_text(self, store):
-        result = json.loads(memory_tool(action="replace", content="new", store=store))
+    def test_replace_requires_uri_before_old_text(self):
+        result = json.loads(memory_tool(action="replace", content="new"))
         assert result["success"] is False
         assert result["retryable"] is True
         assert result["error"] == "Missing uri."
 
-    def test_remove_requires_uri_before_old_text(self, store):
-        result = json.loads(memory_tool(action="remove", store=store))
+    def test_remove_requires_uri_before_old_text(self):
+        result = json.loads(memory_tool(action="remove"))
         assert result["success"] is False
         assert result["retryable"] is True
         assert result["error"] == "Missing uri."
