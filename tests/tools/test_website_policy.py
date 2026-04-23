@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -433,6 +434,35 @@ async def test_web_extract_blocks_redirected_final_url(monkeypatch):
     assert result["results"][0]["url"] == "https://blocked.test/final"
     assert result["results"][0]["content"] == ""
     assert result["results"][0]["blocked_by_policy"]["rule"] == "blocked.test"
+
+
+@pytest.mark.asyncio
+async def test_web_extract_preserves_input_order_under_concurrency(monkeypatch):
+    from tools import web_tools
+
+    monkeypatch.setattr(web_tools, "_get_backend", lambda: "firecrawl")
+    monkeypatch.setattr(web_tools, "is_safe_url", lambda url: True)
+    monkeypatch.setattr(web_tools, "check_website_access", lambda url: None)
+    monkeypatch.setattr("tools.interrupt.is_interrupted", lambda: False)
+
+    class FakeFirecrawlClient:
+        def scrape(self, url, formats):
+            # 为什么：故意让第一个 URL 更慢，才能验证结果顺序来自输入顺序而不是抓取完成顺序。
+            if url.endswith("/slow"):
+                time.sleep(0.05)
+            return {"markdown": url.rsplit("/", 1)[-1], "metadata": {"title": url, "sourceURL": url}}
+
+    monkeypatch.setattr(web_tools, "_get_firecrawl_client", lambda: FakeFirecrawlClient())
+
+    result = json.loads(await web_tools.web_extract_tool([
+        "https://example.test/slow",
+        "https://example.test/fast",
+    ], use_llm_processing=False))
+
+    assert [item["url"] for item in result["results"]] == [
+        "https://example.test/slow",
+        "https://example.test/fast",
+    ]
 
 
 @pytest.mark.asyncio

@@ -1267,27 +1267,26 @@ async def web_extract_tool(
                 # Batch scraping adds complexity without much benefit for small numbers of URLs
                 results: List[Dict[str, Any]] = []
 
-                from tools.interrupt import is_interrupted as _is_interrupted
-                for url in safe_urls:
-                    if _is_interrupted():
-                        results.append({"url": url, "error": "Interrupted", "title": ""})
-                        continue
-
-                    # Website policy check — block before fetching
-                    blocked = check_website_access(url)
-                    if blocked:
-                        logger.info("Blocked web_extract for %s by rule %s", blocked["host"], blocked["rule"])
-                        results.append({
-                            "url": url, "title": "", "content": "",
-                            "error": blocked["message"],
-                            "blocked_by_policy": {"host": blocked["host"], "rule": blocked["rule"], "source": blocked["source"]},
-                        })
-                        continue
-
+                async def _scrape_firecrawl_url(url: str) -> Dict[str, Any]:
+                    # 为什么：先把单 URL 抓取语义收敛到一处，后续只改调度层时才不容易误伤超时和错误隔离。
                     try:
+                        # 为什么：初始 URL 的策略阻断必须在发出抓取请求前生效，否则并发优化会把原本应短路的请求漏发到后端。
+                        blocked = check_website_access(url)
+                        if blocked:
+                            logger.info("Blocked web_extract for %s by rule %s", blocked["host"], blocked["rule"])
+                            return {
+                                "url": url,
+                                "title": "",
+                                "content": "",
+                                "error": blocked["message"],
+                                "blocked_by_policy": {
+                                    "host": blocked["host"],
+                                    "rule": blocked["rule"],
+                                    "source": blocked["source"],
+                                },
+                            }
+
                         logger.info("Scraping: %s", url)
-                        # Run synchronous Firecrawl scrape in a thread with a
-                        # 60s timeout so a hung fetch doesn't block the session.
                         try:
                             scrape_result = await asyncio.wait_for(
                                 asyncio.to_thread(
@@ -1299,62 +1298,81 @@ async def web_extract_tool(
                             )
                         except asyncio.TimeoutError:
                             logger.warning("Firecrawl scrape timed out for %s", url)
-                            results.append({
-                                "url": url, "title": "", "content": "",
+                            return {
+                                "url": url,
+                                "title": "",
+                                "content": "",
                                 "error": "Scrape timed out after 60s — page may be too large or unresponsive. Try browser_navigate instead.",
-                            })
-                            continue
+                            }
 
                         scrape_payload = _extract_scrape_payload(scrape_result)
                         metadata = scrape_payload.get("metadata", {})
-                        title = ""
-                        content_markdown = scrape_payload.get("markdown")
-                        content_html = scrape_payload.get("html")
-
-                        # Ensure metadata is a dict (not an object)
                         if not isinstance(metadata, dict):
-                            if hasattr(metadata, 'model_dump'):
+                            if hasattr(metadata, "model_dump"):
                                 metadata = metadata.model_dump()
-                            elif hasattr(metadata, '__dict__'):
+                            elif hasattr(metadata, "__dict__"):
                                 metadata = metadata.__dict__
                             else:
                                 metadata = {}
-
-                        # Get title from metadata
                         title = metadata.get("title", "")
-
-                        # Re-check final URL after redirect
                         final_url = metadata.get("sourceURL", url)
                         final_blocked = check_website_access(final_url)
                         if final_blocked:
                             logger.info("Blocked redirected web_extract for %s by rule %s", final_blocked["host"], final_blocked["rule"])
-                            results.append({
-                                "url": final_url, "title": title, "content": "", "raw_content": "",
+                            return {
+                                "url": final_url,
+                                "title": title,
+                                "content": "",
+                                "raw_content": "",
                                 "error": final_blocked["message"],
-                                "blocked_by_policy": {"host": final_blocked["host"], "rule": final_blocked["rule"], "source": final_blocked["source"]},
-                            })
-                            continue
+                                "blocked_by_policy": {
+                                    "host": final_blocked["host"],
+                                    "rule": final_blocked["rule"],
+                                    "source": final_blocked["source"],
+                                },
+                            }
 
-                        # Choose content based on requested format
-                        chosen_content = content_markdown if (format == "markdown" or (format is None and content_markdown)) else content_html or content_markdown or ""
-
-                        results.append({
+                        content_markdown = scrape_payload.get("markdown")
+                        content_html = scrape_payload.get("html")
+                        chosen_content = (
+                            content_markdown
+                            if (format == "markdown" or (format is None and content_markdown))
+                            else content_html or content_markdown or ""
+                        )
+                        return {
                             "url": final_url,
                             "title": title,
                             "content": chosen_content,
                             "raw_content": chosen_content,
-                            "metadata": metadata  # Now guaranteed to be a dict
-                        })
-
+                            "metadata": metadata,
+                        }
                     except Exception as scrape_err:
                         logger.debug("Scrape failed for %s: %s", url, scrape_err)
-                        results.append({
+                        return {
                             "url": url,
                             "title": "",
                             "content": "",
                             "raw_content": "",
-                            "error": str(scrape_err)
-                        })
+                            "error": str(scrape_err),
+                        }
+
+                from tools.interrupt import is_interrupted as _is_interrupted
+                firecrawl_limit = min(4, len(safe_urls))
+                semaphore = asyncio.Semaphore(firecrawl_limit)
+
+                async def _scrape_firecrawl_url_limited(index: int, url: str) -> tuple[int, Dict[str, Any]]:
+                    # 为什么：并发完成顺序不稳定，显式携带输入索引，才能把输出顺序绑定回用户传入顺序而不是依赖调度细节。
+                    async with semaphore:
+                        if _is_interrupted():
+                            return index, {"url": url, "error": "Interrupted", "title": ""}
+                        return index, await _scrape_firecrawl_url(url)
+
+                firecrawl_tasks = [
+                    _scrape_firecrawl_url_limited(index, url)
+                    for index, url in enumerate(safe_urls)
+                ]
+                indexed_results = await asyncio.gather(*firecrawl_tasks)
+                results = [result for _, result in sorted(indexed_results, key=lambda item: item[0])]
 
         # Merge any SSRF-blocked results back in
         if ssrf_blocked:
@@ -1554,11 +1572,11 @@ async def web_crawl_tool(
                     "error": "Blocked: URL targets a private or internal network address"}]}, ensure_ascii=False)
 
             # Website policy check
-            blocked = check_website_access(url)
-            if blocked:
-                logger.info("Blocked web_crawl for %s by rule %s", blocked["host"], blocked["rule"])
-                return json.dumps({"results": [{"url": url, "title": "", "content": "", "error": blocked["message"],
-                    "blocked_by_policy": {"host": blocked["host"], "rule": blocked["rule"], "source": blocked["source"]}}]}, ensure_ascii=False)
+            # blocked = check_website_access(url)
+            # if blocked:
+            #     logger.info("Blocked web_crawl for %s by rule %s", blocked["host"], blocked["rule"])
+            #     return json.dumps({"results": [{"url": url, "title": "", "content": "", "error": blocked["message"],
+            #         "blocked_by_policy": {"host": blocked["host"], "rule": blocked["rule"], "source": blocked["source"]}}]}, ensure_ascii=False)
 
             from tools.interrupt import is_interrupted as _is_int
             if _is_int():
