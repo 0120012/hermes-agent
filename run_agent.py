@@ -3100,10 +3100,10 @@ class AIAgent:
 
         # Tool-aware behavioral guidance: only inject when the tools are loaded
         tool_guidance = []
-        if "memory" in self.valid_tool_names:
-            tool_guidance.append(MEMORY_GUIDANCE)
-        # if "session_search" in self.valid_tool_names:
-        #     tool_guidance.append(SESSION_SEARCH_GUIDANCE)
+        # if "memory" in self.valid_tool_names:
+        #     tool_guidance.append(MEMORY_GUIDANCE)
+        if "session_search" in self.valid_tool_names:
+            tool_guidance.append(SESSION_SEARCH_GUIDANCE)
         if "skill_manage" in self.valid_tool_names:
             tool_guidance.append(SKILLS_GUIDANCE)
         if tool_guidance:
@@ -3215,7 +3215,7 @@ class AIAgent:
 
         if _soul_loaded:
             prompt_parts.append(
-               "Then immediately run `memory(action=\"read\", uri=\"system://boot\")` "
+               "Then immediately run `mcp_nocturne_memory_read_memory(uri=\"system://boot\")` "
             )
 
         return "\n\n".join(p.strip() for p in prompt_parts if p.strip())

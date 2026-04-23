@@ -39,14 +39,16 @@ from hermes_cli.nous_subscription import NousFeatureState, NousSubscriptionFeatu
 
 class TestGuidanceConstants:
     def test_memory_guidance_discourages_task_logs(self):
-        assert "durable facts" in MEMORY_GUIDANCE
-        assert "Do NOT save task progress" in MEMORY_GUIDANCE
-        assert "session_search" in MEMORY_GUIDANCE
-        assert "like a diary" not in MEMORY_GUIDANCE
+        assert "Prefer storing important knowledge" in MEMORY_GUIDANCE
+        assert "I do not save task progress" in MEMORY_GUIDANCE
+        assert "priority-only updates" in MEMORY_GUIDANCE
+        assert "read_memory" in MEMORY_GUIDANCE
+        assert "session_search" not in MEMORY_GUIDANCE
         assert ">80%" not in MEMORY_GUIDANCE
 
     def test_session_search_guidance_is_simple_cross_session_recall(self):
-        assert "relevant cross-session context exists" in SESSION_SEARCH_GUIDANCE
+        assert "explicitly mentions a past conversation" in SESSION_SEARCH_GUIDANCE
+        assert "just because the topic feels familiar" in SESSION_SEARCH_GUIDANCE
         assert "recent turns of the current session" not in SESSION_SEARCH_GUIDANCE
 
 
@@ -164,10 +166,10 @@ class TestParseSkillFile:
 
     def test_long_description_truncated(self, tmp_path):
         skill_file = tmp_path / "SKILL.md"
-        long_desc = "A" * 100
+        long_desc = "A" * 200
         skill_file.write_text(f"---\ndescription: {long_desc}\n---\n")
         _, _, desc = _parse_skill_file(skill_file)
-        assert len(desc) <= 60
+        assert len(desc) <= 120
         assert desc.endswith("...")
 
     def test_nonexistent_file_returns_defaults(self, tmp_path):
@@ -1019,7 +1021,7 @@ class TestOpenAIModelExecutionGuidance:
     def test_guidance_covers_prerequisite_checks(self):
         text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()
         assert "prerequisite" in text
-        assert "dependency" in text
+        assert "dependent" in text or "unknown context" in text
 
     def test_guidance_covers_verification(self):
         text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()

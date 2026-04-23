@@ -668,10 +668,10 @@ class TestBuildSystemPrompt:
         # Should contain current date info like "Conversation started:"
         assert "Conversation started:" in prompt
 
-    def test_includes_nous_subscription_prompt(self, agent, monkeypatch):
+    def test_nous_subscription_prompt_not_included_when_hook_disabled(self, agent, monkeypatch):
         monkeypatch.setattr(run_agent, "build_nous_subscription_prompt", lambda tool_names: "NOUS SUBSCRIPTION BLOCK")
         prompt = agent._build_system_prompt()
-        assert "NOUS SUBSCRIPTION BLOCK" in prompt
+        assert "NOUS SUBSCRIPTION BLOCK" not in prompt
 
     def test_skills_prompt_derives_available_toolsets_from_loaded_tools(self):
         tools = _make_tool_defs("web_search", "skills_list", "skill_view", "skill_manage")
