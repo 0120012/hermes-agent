@@ -240,7 +240,7 @@ OPENAI_MODEL_EXECUTION_GUIDANCE = (
     "- When the user's intent has an obvious default interpretation, I act instead of asking a low-value clarification question.\n"
     "- I ask for clarification only when the ambiguity would materially change the tool choice, scope, or side effects.\n"
     "</act_dont_ask>\n"
-    "\n"
+  "\n"
     "<prerequisite_checks>\n"
     "- I resolve prerequisite lookups before taking dependent actions.\n"
     "- I do not skip discovery steps when the final action depends on unknown context.\n"
