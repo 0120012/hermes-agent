@@ -1270,21 +1270,21 @@ async def web_extract_tool(
                 async def _scrape_firecrawl_url(url: str) -> Dict[str, Any]:
                     # 为什么：先把单 URL 抓取语义收敛到一处，后续只改调度层时才不容易误伤超时和错误隔离。
                     try:
-                        # 为什么：初始 URL 的策略阻断必须在发出抓取请求前生效，否则并发优化会把原本应短路的请求漏发到后端。
-                        blocked = check_website_access(url)
-                        if blocked:
-                            logger.info("Blocked web_extract for %s by rule %s", blocked["host"], blocked["rule"])
-                            return {
-                                "url": url,
-                                "title": "",
-                                "content": "",
-                                "error": blocked["message"],
-                                "blocked_by_policy": {
-                                    "host": blocked["host"],
-                                    "rule": blocked["rule"],
-                                    "source": blocked["source"],
-                                },
-                            }
+                        # 为什么：当前提取路径按要求只保留 SSRF 防护，先停用 website policy，避免外网页面在抓取前后被额外拦截。
+                        # blocked = check_website_access(url)
+                        # if blocked:
+                        #     logger.info("Blocked web_extract for %s by rule %s", blocked["host"], blocked["rule"])
+                        #     return {
+                        #         "url": url,
+                        #         "title": "",
+                        #         "content": "",
+                        #         "error": blocked["message"],
+                        #         "blocked_by_policy": {
+                        #             "host": blocked["host"],
+                        #             "rule": blocked["rule"],
+                        #             "source": blocked["source"],
+                        #         },
+                        #     }
 
                         logger.info("Scraping: %s", url)
                         try:
@@ -1316,21 +1316,21 @@ async def web_extract_tool(
                                 metadata = {}
                         title = metadata.get("title", "")
                         final_url = metadata.get("sourceURL", url)
-                        final_blocked = check_website_access(final_url)
-                        if final_blocked:
-                            logger.info("Blocked redirected web_extract for %s by rule %s", final_blocked["host"], final_blocked["rule"])
-                            return {
-                                "url": final_url,
-                                "title": title,
-                                "content": "",
-                                "raw_content": "",
-                                "error": final_blocked["message"],
-                                "blocked_by_policy": {
-                                    "host": final_blocked["host"],
-                                    "rule": final_blocked["rule"],
-                                    "source": final_blocked["source"],
-                                },
-                            }
+                        # final_blocked = check_website_access(final_url)
+                        # if final_blocked:
+                        #     logger.info("Blocked redirected web_extract for %s by rule %s", final_blocked["host"], final_blocked["rule"])
+                        #     return {
+                        #         "url": final_url,
+                        #         "title": title,
+                        #         "content": "",
+                        #         "raw_content": "",
+                        #         "error": final_blocked["message"],
+                        #         "blocked_by_policy": {
+                        #             "host": final_blocked["host"],
+                        #             "rule": final_blocked["rule"],
+                        #             "source": final_blocked["source"],
+                        #         },
+                        #     }
 
                         content_markdown = scrape_payload.get("markdown")
                         content_html = scrape_payload.get("html")
@@ -1357,7 +1357,8 @@ async def web_extract_tool(
                         }
 
                 from tools.interrupt import is_interrupted as _is_interrupted
-                firecrawl_limit = min(4, len(safe_urls))
+                # 为什么：单核小机的瓶颈更容易落在线程调度和内存抖动上，抓取并发先保守收敛到 2，避免吞吐收益还没出来就先把机器压抖。
+                firecrawl_limit = min(2, len(safe_urls))
                 semaphore = asyncio.Semaphore(firecrawl_limit)
 
                 async def _scrape_firecrawl_url_limited(index: int, url: str) -> tuple[int, Dict[str, Any]]:
