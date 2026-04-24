@@ -81,7 +81,7 @@ from agent.memory_manager import build_memory_context_block, sanitize_context
 from agent.retry_utils import jittered_backoff
 from agent.error_classifier import classify_api_error, FailoverReason
 from agent.prompt_builder import (
-    DEFAULT_AGENT_IDENTITY, PLATFORM_HINTS,
+    INIT_AGENT_IDENTITY, DEFAULT_AGENT_IDENTITY, PLATFORM_HINTS,
     MEMORY_GUIDANCE, SESSION_SEARCH_GUIDANCE, SKILLS_GUIDANCE,
     build_nous_subscription_prompt,
 )
@@ -4072,12 +4072,13 @@ class AIAgent:
         #   7. Platform-specific formatting hint
 
         # Try SOUL.md as primary identity (unless context files are skipped)
+        prompt_parts: list[str] = [INIT_AGENT_IDENTITY]
         _soul_loaded = False
         if not self.skip_context_files:
-            _soul_content = load_soul_md()
-            if _soul_content:
-                prompt_parts = [_soul_content]
-                _soul_loaded = True
+            # _soul_content = load_soul_md()
+            # if _soul_content:
+            #     prompt_parts = [_soul_content]
+            _soul_loaded = True
 
         if not _soul_loaded:
             # Fallback to hardcoded identity
@@ -4085,8 +4086,8 @@ class AIAgent:
 
         # Tool-aware behavioral guidance: only inject when the tools are loaded
         tool_guidance = []
-        if "memory" in self.valid_tool_names:
-            tool_guidance.append(MEMORY_GUIDANCE)
+        # if "memory" in self.valid_tool_names:
+        #     tool_guidance.append(MEMORY_GUIDANCE)
         if "session_search" in self.valid_tool_names:
             tool_guidance.append(SESSION_SEARCH_GUIDANCE)
         if "skill_manage" in self.valid_tool_names:
@@ -4094,9 +4095,9 @@ class AIAgent:
         if tool_guidance:
             prompt_parts.append(" ".join(tool_guidance))
 
-        nous_subscription_prompt = build_nous_subscription_prompt(self.valid_tool_names)
-        if nous_subscription_prompt:
-            prompt_parts.append(nous_subscription_prompt)
+        # nous_subscription_prompt = build_nous_subscription_prompt(self.valid_tool_names)
+        # if nous_subscription_prompt:
+        #     prompt_parts.append(nous_subscription_prompt)
         # Tool-use enforcement: tells the model to actually call tools instead
         # of describing intended actions.  Controlled by config.yaml
         # agent.tool_use_enforcement:
@@ -4119,16 +4120,14 @@ class AIAgent:
                 model_lower = (self.model or "").lower()
                 _inject = any(p in model_lower for p in TOOL_USE_ENFORCEMENT_MODELS)
             if _inject:
-                prompt_parts.append(TOOL_USE_ENFORCEMENT_GUIDANCE)
                 _model_lower = (self.model or "").lower()
-                # Google model operational guidance (conciseness, absolute
-                # paths, parallel tool calls, verify-before-edit, etc.)
-                if "gemini" in _model_lower or "gemma" in _model_lower:
-                    prompt_parts.append(GOOGLE_MODEL_OPERATIONAL_GUIDANCE)
-                # OpenAI GPT/Codex execution discipline (tool persistence,
-                # prerequisite checks, verification, anti-hallucination).
+                # 为什么：模型专用提示词优先，避免专用模型重复叠加通用约束。
                 if "gpt" in _model_lower or "codex" in _model_lower:
                     prompt_parts.append(OPENAI_MODEL_EXECUTION_GUIDANCE)
+                elif "gemini" in _model_lower or "gemma" in _model_lower:
+                    prompt_parts.append(GOOGLE_MODEL_OPERATIONAL_GUIDANCE)
+                else:
+                    prompt_parts.append(TOOL_USE_ENFORCEMENT_GUIDANCE)
 
         # so it can refer the user to them rather than reinventing answers.
 
@@ -4136,26 +4135,6 @@ class AIAgent:
         # API-call time only so it stays out of the cached/stored system prompt.
         if system_message is not None:
             prompt_parts.append(system_message)
-
-        if self._memory_store:
-            if self._memory_enabled:
-                mem_block = self._memory_store.format_for_system_prompt("memory")
-                if mem_block:
-                    prompt_parts.append(mem_block)
-            # USER.md is always included when enabled.
-            if self._user_profile_enabled:
-                user_block = self._memory_store.format_for_system_prompt("user")
-                if user_block:
-                    prompt_parts.append(user_block)
-
-        # External memory provider system prompt block (additive to built-in)
-        if self._memory_manager:
-            try:
-                _ext_mem_block = self._memory_manager.build_system_prompt()
-                if _ext_mem_block:
-                    prompt_parts.append(_ext_mem_block)
-            except Exception:
-                pass
 
         has_skills_tools = any(name in self.valid_tool_names for name in ['skills_list', 'skill_view', 'skill_manage'])
         if has_skills_tools:
@@ -4173,28 +4152,29 @@ class AIAgent:
         else:
             skills_prompt = ""
         if skills_prompt:
-            prompt_parts.append(skills_prompt)
+            pass
+            # prompt_parts.append(skills_prompt)
 
-        if not self.skip_context_files:
+        # if not self.skip_context_files:
             # Use TERMINAL_CWD for context file discovery when set (gateway
             # mode).  The gateway process runs from the hermes-agent install
             # dir, so os.getcwd() would pick up the repo's AGENTS.md and
             # other dev files — inflating token usage by ~10k for no benefit.
-            _context_cwd = os.getenv("TERMINAL_CWD") or None
-            context_files_prompt = build_context_files_prompt(
-                cwd=_context_cwd, skip_soul=_soul_loaded)
-            if context_files_prompt:
-                prompt_parts.append(context_files_prompt)
+            # _context_cwd = os.getenv("TERMINAL_CWD") or None
+            # context_files_prompt = build_context_files_prompt(
+            #     cwd=_context_cwd, skip_soul=_soul_loaded)
+            # if context_files_prompt:
+            #     prompt_parts.append(context_files_prompt)
 
         from hermes_time import now as _hermes_now
         now = _hermes_now()
         timestamp_line = f"Conversation started: {now.strftime('%A, %B %d, %Y %I:%M %p')}"
         if self.pass_session_id and self.session_id:
             timestamp_line += f"\nSession ID: {self.session_id}"
-        if self.model:
-            timestamp_line += f"\nModel: {self.model}"
-        if self.provider:
-            timestamp_line += f"\nProvider: {self.provider}"
+        # if self.model:
+        #     timestamp_line += f"\nModel: {self.model}"
+        # if self.provider:
+        #     timestamp_line += f"\nProvider: {self.provider}"
         prompt_parts.append(timestamp_line)
 
         # Alibaba Coding Plan API always returns "glm-4.7" as model name regardless
@@ -4218,6 +4198,11 @@ class AIAgent:
         platform_key = (self.platform or "").lower().strip()
         if platform_key in PLATFORM_HINTS:
             prompt_parts.append(PLATFORM_HINTS[platform_key])
+
+        if _soul_loaded:
+            prompt_parts.append(
+               "Then immediately run `mcp_nocturne_memory_read_memory(uri=\"system://boot\")` "
+            )
 
         return "\n\n".join(p.strip() for p in prompt_parts if p.strip())
 
@@ -8818,6 +8803,21 @@ class AIAgent:
             else:
                 # First turn of a new session — build from scratch.
                 self._cached_system_prompt = self._build_system_prompt(system_message)
+                # 为什么：首轮真实发送前的 system prompt 调试价值最高，既直接输出，
+                # 也落盘到当前目录，避免终端截断后拿不到完整原文。
+                _prompt_debug_text = (
+                    "===== INITIAL SYSTEM PROMPT BEGIN =====\n"
+                    f"{self._cached_system_prompt or ''}\n"
+                    "===== INITIAL SYSTEM PROMPT END =====\n"
+                )
+                try:
+                    print(f"\n{_prompt_debug_text}")
+                except (OSError, ValueError):
+                    pass
+                try:
+                    Path("init.md").write_text(_prompt_debug_text, encoding="utf-8")
+                except (OSError, ValueError):
+                    pass
                 # Plugin hook: on_session_start
                 # Fired once when a brand-new session is created (not on
                 # continuation).  Plugins can use this to initialise
