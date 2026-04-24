@@ -155,24 +155,6 @@ class TestSkillsGuardContentNone:
         assert content == ""
 
 
-# ── session_search_tool (line 164) ────────────────────────────────────────
-
-class TestSessionSearchContentNone:
-    """tools/session_search_tool.py — _summarize_session() return line"""
-
-    def test_none_content_raises_before_fix(self):
-        response = _make_response(None)
-
-        with pytest.raises(AttributeError):
-            response.choices[0].message.content.strip()
-
-    def test_none_content_safe_with_or_guard(self):
-        response = _make_response(None)
-
-        content = (response.choices[0].message.content or "").strip()
-        assert content == ""
-
-
 # ── integration: verify the actual source lines are guarded ───────────────
 
 class TestSourceLinesAreGuarded:

@@ -2,50 +2,25 @@
 """
 Session Search Tool - Long-Term Conversation Recall
 
-Searches past session transcripts in SQLite via FTS5, then summarizes the top
-matching sessions using a cheap/fast model (same pattern as web_extract).
-Returns focused summaries of past conversations rather than raw transcripts,
+Searches past session transcripts in SQLite via FTS5, then returns compact
+session-level recall built from local match evidence.
+Returns focused summaries of past conversations based on snippets/context,
 keeping the main model's context window clean.
 
 Flow:
   1. FTS5 search finds matching messages ranked by relevance
   2. Groups by session, takes the top N unique sessions (default 3)
-  3. Loads each session's conversation, truncates to ~100k chars centered on matches
-  4. Sends to Gemini Flash with a focused summarization prompt
+  3. Resolves child sessions to their parent session lineage
+  4. Builds per-session summaries from local snippets and surrounding context
   5. Returns per-session summaries with metadata
 """
 
-import asyncio
-import concurrent.futures
 import json
 import logging
 import re
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Union
 
-from agent.auxiliary_client import async_call_llm, extract_content_or_reasoning
 MAX_SESSION_CHARS = 100_000
-MAX_SUMMARY_TOKENS = 10000
-
-
-def _get_session_search_max_concurrency(default: int = 3) -> int:
-    """Read auxiliary.session_search.max_concurrency with sane bounds."""
-    try:
-        from hermes_cli.config import load_config
-        config = load_config()
-    except ImportError:
-        return default
-    aux = config.get("auxiliary", {}) if isinstance(config, dict) else {}
-    task_config = aux.get("session_search", {}) if isinstance(aux, dict) else {}
-    if not isinstance(task_config, dict):
-        return default
-    raw = task_config.get("max_concurrency")
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return max(1, min(value, 5))
 
 
 def _format_timestamp(ts: Union[int, float, str, None]) -> str:
@@ -75,7 +50,7 @@ def _format_timestamp(ts: Union[int, float, str, None]) -> str:
 
 
 def _format_conversation(messages: List[Dict[str, Any]]) -> str:
-    """Format session messages into a readable transcript for summarization."""
+    """Format session messages into a readable transcript helper string."""
     parts = []
     for msg in messages:
         role = msg.get("role", "unknown").upper()
@@ -193,70 +168,6 @@ def _truncate_around_matches(
     return prefix + truncated + suffix
 
 
-async def _summarize_session(
-    conversation_text: str, query: str, session_meta: Dict[str, Any]
-) -> Optional[str]:
-    """Summarize a single session conversation focused on the search query."""
-    system_prompt = (
-        "You are reviewing a past conversation transcript to help recall what happened. "
-        "Summarize the conversation with a focus on the search topic. Include:\n"
-        "1. What the user asked about or wanted to accomplish\n"
-        "2. What actions were taken and what the outcomes were\n"
-        "3. Key decisions, solutions found, or conclusions reached\n"
-        "4. Any specific commands, files, URLs, or technical details that were important\n"
-        "5. Anything left unresolved or notable\n\n"
-        "Be thorough but concise. Preserve specific details (commands, paths, error messages) "
-        "that would be useful to recall. Write in past tense as a factual recap."
-    )
-
-    source = session_meta.get("source", "unknown")
-    started = _format_timestamp(session_meta.get("started_at"))
-
-    user_prompt = (
-        f"Search topic: {query}\n"
-        f"Session source: {source}\n"
-        f"Session date: {started}\n\n"
-        f"CONVERSATION TRANSCRIPT:\n{conversation_text}\n\n"
-        f"Summarize this conversation with focus on: {query}"
-    )
-
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            response = await async_call_llm(
-                task="session_search",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.1,
-                max_tokens=MAX_SUMMARY_TOKENS,
-            )
-            content = extract_content_or_reasoning(response)
-            if content:
-                return content
-            # Reasoning-only / empty — let the retry loop handle it
-            logging.warning("Session search LLM returned empty content (attempt %d/%d)", attempt + 1, max_retries)
-            if attempt < max_retries - 1:
-                await asyncio.sleep(1 * (attempt + 1))
-                continue
-            return content
-        except RuntimeError:
-            logging.warning("No auxiliary model available for session summarization")
-            return None
-        except Exception as e:
-            if attempt < max_retries - 1:
-                await asyncio.sleep(1 * (attempt + 1))
-            else:
-                logging.warning(
-                    "Session summarization failed after %d attempts: %s",
-                    max_retries,
-                    e,
-                    exc_info=True,
-                )
-                return None
-
-
 # Sources that are excluded from session browsing/searching by default.
 # Third-party integrations (Paperclip agents, etc.) tag their sessions with
 # HERMES_SESSION_SOURCE=tool so they don't clutter the user's session history.
@@ -315,6 +226,22 @@ def _list_recent_sessions(db, limit: int, current_session_id: str = None) -> str
         return tool_error(f"Failed to list recent sessions: {e}", success=False)
 
 
+def _build_extractive_summary(match_info: Dict[str, Any]) -> str:
+    # Why: 把本地 recall 拼装逻辑收敛到单点，避免 session_search 主流程继续膨胀。
+    snippet = re.sub(r"\s+", " ", str(match_info.get("snippet") or match_info.get("content") or "").strip())
+    context_lines = []
+    for ctx in (match_info.get("context") or []):
+        ctx_content = re.sub(r"\s+", " ", str(ctx.get("content") or "").strip())
+        if ctx_content:
+            context_lines.append(f"{str(ctx.get('role') or 'unknown').upper()}: {ctx_content[:160]}")
+    parts = ["[Extractive recall]"]
+    if snippet:
+        parts.append(snippet)
+    if context_lines:
+        parts.append("Context: " + " | ".join(context_lines))
+    return "\n".join(parts)
+
+
 def session_search(
     query: str,
     role_filter: str = None,
@@ -323,9 +250,10 @@ def session_search(
     current_session_id: str = None,
 ) -> str:
     """
-    Search past sessions and return focused summaries of matching conversations.
+    Search past sessions and return focused recall of matching conversations.
 
-    Uses FTS5 to find matches, then summarizes the top sessions with Gemini Flash.
+    Uses FTS5 to find matches, then assembles extractive recall from local
+    match evidence (snippet/context) without default LLM summarization.
     The current session is excluded from results since the agent already has that context.
     """
     if db is None:
@@ -423,84 +351,16 @@ def session_search(
             if len(seen_sessions) >= limit:
                 break
 
-        # Prepare all sessions for parallel summarization
-        tasks = []
-        for session_id, match_info in seen_sessions.items():
-            try:
-                messages = db.get_messages_as_conversation(session_id)
-                if not messages:
-                    continue
-                session_meta = db.get_session(session_id) or {}
-                conversation_text = _format_conversation(messages)
-                conversation_text = _truncate_around_matches(conversation_text, query)
-                tasks.append((session_id, match_info, conversation_text, session_meta))
-            except Exception as e:
-                logging.warning(
-                    "Failed to prepare session %s: %s",
-                    session_id,
-                    e,
-                    exc_info=True,
-                )
-
-        # Summarize all sessions in parallel
-        async def _summarize_all() -> List[Union[str, Exception]]:
-            """Summarize all sessions with bounded concurrency."""
-            max_concurrency = min(_get_session_search_max_concurrency(), max(1, len(tasks)))
-            semaphore = asyncio.Semaphore(max_concurrency)
-
-            async def _bounded_summary(text: str, meta: Dict[str, Any]) -> Optional[str]:
-                async with semaphore:
-                    return await _summarize_session(text, query, meta)
-
-            coros = [
-                _bounded_summary(text, meta)
-                for _, _, text, meta in tasks
-            ]
-            return await asyncio.gather(*coros, return_exceptions=True)
-
-        try:
-            # Use _run_async() which properly manages event loops across
-            # CLI, gateway, and worker-thread contexts.  The previous
-            # pattern (asyncio.run() in a ThreadPoolExecutor) created a
-            # disposable event loop that conflicted with cached
-            # AsyncOpenAI/httpx clients bound to a different loop,
-            # causing deadlocks in gateway mode (#2681).
-            from model_tools import _run_async
-            results = _run_async(_summarize_all())
-        except concurrent.futures.TimeoutError:
-            logging.warning(
-                "Session summarization timed out after 60 seconds",
-                exc_info=True,
-            )
-            return json.dumps({
-                "success": False,
-                "error": "Session summarization timed out. Try a more specific query or reduce the limit.",
-            }, ensure_ascii=False)
-
         summaries = []
-        for (session_id, match_info, conversation_text, _), result in zip(tasks, results):
-            if isinstance(result, Exception):
-                logging.warning(
-                    "Failed to summarize session %s: %s",
-                    session_id, result, exc_info=True,
-                )
-                result = None
-
+        # Why: 默认路径只消费本地命中证据，直接遍历结果即可，避免无意义中间层。
+        for session_id, match_info in seen_sessions.items():
             entry = {
                 "session_id": session_id,
                 "when": _format_timestamp(match_info.get("session_started")),
                 "source": match_info.get("source", "unknown"),
                 "model": match_info.get("model"),
             }
-
-            if result:
-                entry["summary"] = result
-            else:
-                # Fallback: raw preview so matched sessions aren't silently
-                # dropped when the summarizer is unavailable (fixes #3409).
-                preview = (conversation_text[:500] + "\n…[truncated]") if conversation_text else "No preview available."
-                entry["summary"] = f"[Raw preview — summarization unavailable]\n{preview}"
-
+            entry["summary"] = _build_extractive_summary(match_info)
             summaries.append(entry)
 
         return json.dumps({
@@ -517,7 +377,7 @@ def session_search(
 
 
 def check_session_search_requirements() -> bool:
-    """Requires SQLite state database and an auxiliary text model."""
+    """Requires the local SQLite session database."""
     try:
         from hermes_state import DEFAULT_DB_PATH
         return DEFAULT_DB_PATH.parent.exists()
@@ -529,13 +389,13 @@ SESSION_SEARCH_SCHEMA = {
     "name": "session_search",
     "description": (
         "Search your long-term memory of past conversations, or browse recent sessions. This is your recall -- "
-        "every past session is searchable, and this tool summarizes what happened.\n\n"
+        "every past session is searchable, and this tool returns compact recall built from matching evidence.\n\n"
         "TWO MODES:\n"
         "1. Recent sessions (no query): Call with no arguments to see what was worked on recently. "
         "Returns titles, previews, and timestamps. Zero LLM cost, instant. "
         "Start here when the user asks what were we working on or what did we do recently.\n"
         "2. Keyword search (with query): Search for specific topics across all past sessions. "
-        "Returns LLM-generated summaries of matching sessions.\n\n"
+        "Returns per-session summaries built from local matched snippets and surrounding context.\n\n"
         "USE THIS PROACTIVELY when:\n"
         "- The user says 'we did this before', 'remember when', 'last time', 'as I mentioned'\n"
         "- The user asks about a topic you worked on before but don't have in current context\n"
@@ -548,7 +408,7 @@ SESSION_SEARCH_SCHEMA = {
         "phrases for exact match (\"docker networking\"), boolean (python NOT java), prefix (deploy*). "
         "IMPORTANT: Use OR between keywords for best results — FTS5 defaults to AND which misses "
         "sessions that only mention some terms. If a broad OR query returns nothing, try individual "
-        "keyword searches in parallel. Returns summaries of the top matching sessions."
+        "keyword searches in parallel. Returns summaries built from the top matching local evidence."
     ),
     "parameters": {
         "type": "object",
@@ -563,7 +423,7 @@ SESSION_SEARCH_SCHEMA = {
             },
             "limit": {
                 "type": "integer",
-                "description": "Max sessions to summarize (default: 3, max: 5).",
+                "description": "Max matching sessions to return (default: 3, max: 5).",
                 "default": 3,
             },
         },
