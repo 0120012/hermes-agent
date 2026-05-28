@@ -4080,9 +4080,9 @@ class AIAgent:
             #     prompt_parts = [_soul_content]
             _soul_loaded = True
 
-        if not _soul_loaded:
+        # if not _soul_loaded:
             # Fallback to hardcoded identity
-            prompt_parts = [DEFAULT_AGENT_IDENTITY]
+            # prompt_parts = [DEFAULT_AGENT_IDENTITY]
 
         # Tool-aware behavioral guidance: only inject when the tools are loaded
         tool_guidance = []
@@ -4201,7 +4201,7 @@ class AIAgent:
 
         if _soul_loaded:
             prompt_parts.append(
-               "Then immediately run `mcp_nocturne_memory_read_memory(uri=\"system://boot\")` "
+               "Then immediately run this shell command: `mem012 --profile riko init`, and read the response."
             )
 
         return "\n\n".join(p.strip() for p in prompt_parts if p.strip())
