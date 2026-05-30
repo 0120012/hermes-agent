@@ -25,6 +25,7 @@ import ssl
 import threading
 import time
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from agent.anthropic_adapter import _is_oauth_token
@@ -297,6 +298,21 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
     # First turn of a new session (or recovering from a broken stored
     # prompt) — build from scratch.
     agent._cached_system_prompt = agent._build_system_prompt(system_message)
+    # 为什么：首轮真实发送前的 system prompt 调试价值最高，既直接输出，
+    # 也落盘到当前目录，避免终端截断后拿不到完整原文。
+    _prompt_debug_text = (
+        "===== INITIAL SYSTEM PROMPT BEGIN =====\n"
+        f"{agent._cached_system_prompt or ''}\n"
+        "===== INITIAL SYSTEM PROMPT END =====\n"
+    )
+    try:
+        print(f"\n{_prompt_debug_text}")
+    except (OSError, ValueError):
+        pass
+    try:
+        Path("init.md").write_text(_prompt_debug_text, encoding="utf-8")
+    except (OSError, ValueError):
+        pass
 
     # Plugin hook: on_session_start — fired once when a brand-new
     # session is created (not on continuation).  Plugins can use this
