@@ -2,6 +2,9 @@
 
 # Update
 
+- `a118eebf0` `docs: trim Chinese README sections`
+  - 从 `README.zh-CN.md` 删除 initial system prompt dump 小节。
+  - 删除 Nous Portal 说明段，保留更精简的中文 README。
 - `6c83e4632` `chore: remove github automation and plans`
   - 删除 `.github/` 下的 GitHub 模板、Actions、Dependabot 配置。
   - 删除 `.plans/` 下的计划文档。
