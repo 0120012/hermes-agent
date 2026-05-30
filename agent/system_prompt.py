@@ -16,7 +16,7 @@ Three tiers are joined with ``\\n\\n``:
 * ``context``  — caller-supplied ``system_message`` plus context files
   (AGENTS.md / .cursorrules / etc.) discovered under ``TERMINAL_CWD``.
 * ``volatile`` — memory snapshot, USER.md profile, external memory
-  provider block, timestamp/session/model/provider line.
+  provider block.
 
 Pure helpers that read the agent's state.  AIAgent keeps thin forwarders.
 """
@@ -67,7 +67,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
       * ``context``  — context files (AGENTS.md, .cursorrules, etc.)
         and caller-supplied system_message.
       * ``volatile`` — memory snapshot, user profile, external
-        memory provider block, timestamp line.
+        memory provider block.
 
     Joined into a single string by :func:`build_system_prompt` and
     cached on ``agent._cached_system_prompt`` for the lifetime of the
@@ -83,19 +83,39 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # ── Stable tier ────────────────────────────────────────────────
     stable_parts: List[str] = []
 
+    # Profile hint must precede the mem012 bootloader in DEFAULT_AGENT_IDENTITY.
+    try:
+        from agent.file_safety import _resolve_active_profile_name
+        active_profile = _resolve_active_profile_name()
+    except Exception:
+        active_profile = "default"
+    if active_profile == "default":
+        stable_parts.append(
+            "my profile: hermes. 我的 Hermes profile 工作空间是 ~/.hermes/。"
+            "除非用户明确要求，否则不得修改其他 Hermes profile 工作空间"
+            "（~/.hermes/profiles/<name>/）。"
+        )
+    else:
+        stable_parts.append(
+            f"我的profile: {active_profile}. 我的profile工作空间是: "
+            f"~/.hermes/profiles/{active_profile}/。除非用户明确要求，否则不得修改"
+            f"其他 Hermes profile 工作空间，包括 default profile 的 ~/.hermes/。"
+        )
+
     # Try SOUL.md as primary identity unless the caller explicitly skipped it.
     # Some execution modes (cron) still want HERMES_HOME persona while keeping
     # cwd project instructions disabled.
+    stable_parts.append(DEFAULT_AGENT_IDENTITY.format(active_profile=active_profile))
     _soul_loaded = False
     if agent.load_soul_identity or not agent.skip_context_files:
         _soul_content = _r.load_soul_md()
         if _soul_content:
-            stable_parts.append(_soul_content)
+    #         stable_parts.append(_soul_content)
             _soul_loaded = True
-
-    if not _soul_loaded:
-        # Fallback to hardcoded identity
-        stable_parts.append(DEFAULT_AGENT_IDENTITY)
+    #
+    # if not _soul_loaded:
+    #     # Fallback to hardcoded identity
+    #     stable_parts.append(DEFAULT_AGENT_IDENTITY)
 
     # Pointer to the hermes-agent skill + docs for user questions about Hermes itself.
     stable_parts.append(HERMES_AGENT_HELP_GUIDANCE)
@@ -127,9 +147,9 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         from agent.prompt_builder import COMPUTER_USE_GUIDANCE
         stable_parts.append(COMPUTER_USE_GUIDANCE)
 
-    nous_subscription_prompt = _r.build_nous_subscription_prompt(agent.valid_tool_names)
-    if nous_subscription_prompt:
-        stable_parts.append(nous_subscription_prompt)
+    # nous_subscription_prompt = _r.build_nous_subscription_prompt(agent.valid_tool_names)
+    # if nous_subscription_prompt:
+    #     stable_parts.append(nous_subscription_prompt)
     # Tool-use enforcement: tells the model to actually call tools instead
     # of describing intended actions.  Controlled by config.yaml
     # agent.tool_use_enforcement:
@@ -205,40 +225,6 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     if _env_hints:
         stable_parts.append(_env_hints)
 
-    # Active-profile hint — names the Hermes profile the agent is running
-    # under so it doesn't conflate ~/.hermes/skills/ (default profile) with
-    # ~/.hermes/profiles/<active>/skills/ (this profile's). Deterministic
-    # for the lifetime of the agent — profile name doesn't change
-    # mid-session, so this doesn't break the prompt cache.
-    # See file_safety._resolve_active_profile_name + classify_cross_profile_target
-    # for the matching tool-side guard.
-    try:
-        from agent.file_safety import _resolve_active_profile_name
-        active_profile = _resolve_active_profile_name()
-    except Exception:
-        active_profile = "default"
-    if active_profile == "default":
-        stable_parts.append(
-            "Active Hermes profile: default. Other profiles (if any) live "
-            "under ~/.hermes/profiles/<name>/. Each profile has its own "
-            "skills/, plugins/, cron/, and memories/ that affect a different "
-            "session than this one. Do not modify another profile's "
-            "skills/plugins/cron/memories unless the user explicitly directs "
-            "you to."
-        )
-    else:
-        stable_parts.append(
-            f"Active Hermes profile: {active_profile}. This session reads "
-            f"and writes ~/.hermes/profiles/{active_profile}/. The default "
-            f"profile's data lives at ~/.hermes/skills/, ~/.hermes/plugins/, "
-            f"~/.hermes/cron/, ~/.hermes/memories/ — those belong to a "
-            f"different session run from a different shell. Do NOT modify "
-            f"another profile's skills/plugins/cron/memories unless the user "
-            f"explicitly directs you to. The cross-profile write guard will "
-            f"refuse such writes by default; pass cross_profile=True only "
-            f"after explicit direction."
-        )
-
     platform_key = (agent.platform or "").lower().strip()
     if platform_key in PLATFORM_HINTS:
         stable_parts.append(PLATFORM_HINTS[platform_key])
@@ -294,23 +280,6 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         except Exception:
             pass
 
-    from hermes_time import now as _hermes_now
-    now = _hermes_now()
-    # Date-only (not minute-precision) so the system prompt is byte-stable
-    # for the full day.  Minute-precision changes invalidate prefix-cache KV
-    # on every rebuild path (compression boundary, fresh-agent gateway turns,
-    # session resume without a stored prompt).  The model can still query the
-    # exact wall-clock time via tools when it actually needs it.
-    # Credit: @iamfoz (PR #20451).
-    timestamp_line = f"Conversation started: {now.strftime('%A, %B %d, %Y')}"
-    if agent.pass_session_id and agent.session_id:
-        timestamp_line += f"\nSession ID: {agent.session_id}"
-    if agent.model:
-        timestamp_line += f"\nModel: {agent.model}"
-    if agent.provider:
-        timestamp_line += f"\nProvider: {agent.provider}"
-    volatile_parts.append(timestamp_line)
-
     return {
         "stable":   "\n\n".join(p.strip() for p in stable_parts   if p and p.strip()),
         "context":  "\n\n".join(p.strip() for p in context_parts  if p and p.strip()),
@@ -328,7 +297,7 @@ def build_system_prompt(agent: Any, system_message: Optional[str] = None) -> str
 
     Layers are ordered cache-friendly: stable identity/guidance first,
     then session-stable context files, then per-call volatile content
-    (memory, USER profile, timestamp).  The whole string is treated as
+    (memory and USER profile).  The whole string is treated as
     one cached block — Hermes never rebuilds or reinjects parts of it
     mid-session, which is the only way to keep upstream prompt caches
     warm across turns.
