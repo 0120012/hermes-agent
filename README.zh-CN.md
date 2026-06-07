@@ -3,6 +3,7 @@
 ```shell
 uv sync --extra all --locked
 uv run hermes setup
+## bash setup-hermes.sh
 ```
 
 ---
