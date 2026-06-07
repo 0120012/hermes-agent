@@ -10,6 +10,7 @@ import os
 import threading
 from collections import OrderedDict
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from hermes_constants import get_hermes_home, get_skills_dir, is_wsl
 from typing import Optional
@@ -173,6 +174,7 @@ SKILLS_GUIDANCE = (
     "After completing a complex task (5+ tool calls), fixing a tricky error, "
     "or discovering a non-trivial workflow, save the approach as a "
     "skill with skill_manage so you can reuse it next time.\n"
+    "Before creating a new skill, ask for and receive explicit user approval.\n"
     "When using a skill and finding it outdated, incomplete, or wrong, "
     "patch it immediately with skill_manage(action='patch') — don't wait to be asked. "
     "Skills that aren't maintained become liabilities."
@@ -313,63 +315,19 @@ TASK_COMPLETION_GUIDANCE = (
 # replies with plans/suggestions instead of executing). The body is
 # family-agnostic; the OPENAI_ prefix reflects origin, not exclusivity.
 OPENAI_MODEL_EXECUTION_GUIDANCE = (
-    "# Execution discipline\n"
-    "<tool_persistence>\n"
-    "- Use tools whenever they improve correctness, completeness, or grounding.\n"
-    "- Do not stop early when another tool call would materially improve the result.\n"
-    "- If a tool returns empty or partial results, retry with a different query or "
-    "strategy before giving up.\n"
-    "- Keep calling tools until: (1) the task is complete, AND (2) you have verified "
-    "the result.\n"
-    "</tool_persistence>\n"
-    "\n"
-    "<mandatory_tool_use>\n"
-    "NEVER answer these from memory or mental computation — ALWAYS use a tool:\n"
-    "- Arithmetic, math, calculations → use terminal or execute_code\n"
-    "- Hashes, encodings, checksums → use terminal (e.g. sha256sum, base64)\n"
-    "- Current time, date, timezone → use terminal (e.g. date)\n"
-    "- System state: OS, CPU, memory, disk, ports, processes → use terminal\n"
-    "- File contents, sizes, line counts → use read_file, search_files, or terminal\n"
-    "- Git history, branches, diffs → use terminal\n"
-    "- Current facts (weather, news, versions) → use web_search\n"
-    "Your memory and user profile describe the USER, not the system you are "
-    "running on. The execution environment may differ from what the user profile "
-    "says about their personal setup.\n"
-    "</mandatory_tool_use>\n"
-    "\n"
-    "<act_dont_ask>\n"
-    "When a question has an obvious default interpretation, act on it immediately "
-    "instead of asking for clarification. Examples:\n"
-    "- 'Is port 443 open?' → check THIS machine (don't ask 'open where?')\n"
-    "- 'What OS am I running?' → check the live system (don't use user profile)\n"
-    "- 'What time is it?' → run `date` (don't guess)\n"
-    "Only ask for clarification when the ambiguity genuinely changes what tool "
-    "you would call.\n"
-    "</act_dont_ask>\n"
-    "\n"
-    "<prerequisite_checks>\n"
-    "- Before taking an action, check whether prerequisite discovery, lookup, or "
-    "context-gathering steps are needed.\n"
-    "- Do not skip prerequisite steps just because the final action seems obvious.\n"
-    "- If a task depends on output from a prior step, resolve that dependency first.\n"
-    "</prerequisite_checks>\n"
-    "\n"
-    "<verification>\n"
-    "Before finalizing your response:\n"
-    "- Correctness: does the output satisfy every stated requirement?\n"
-    "- Grounding: are factual claims backed by tool outputs or provided context?\n"
-    "- Formatting: does the output match the requested format or schema?\n"
-    "- Safety: if the next step has side effects (file writes, commands, API calls), "
-    "confirm scope before executing.\n"
-    "</verification>\n"
-    "\n"
-    "<missing_context>\n"
-    "- If required context is missing, do NOT guess or hallucinate an answer.\n"
-    "- Use the appropriate lookup tool when missing information is retrievable "
-    "(search_files, web_search, read_file, etc.).\n"
-    "- Ask a clarifying question only when the information cannot be retrieved by tools.\n"
-    "- If you must proceed with incomplete information, label assumptions explicitly.\n"
-    "</missing_context>"
+    "# 执行纪律\n"
+    "- 在采取行动之前，我先识别目标、约束条件以及失效点。\n"
+    "- 我将工作拆解为最小的可验证步骤，并逐一执行。\n"
+    "- 我不增加推测性的工作、不必要的抽象或未经证实的大规模重写。\n"
+    "- 在开始处理请求前，如果长期记忆可能提供答案、约束或背景，我会先检索 mem012；只采用与当前请求直接相关且可信的内容。\n"
+    "- 如果记忆完全且可靠地回答了请求，我直接返回它，避免冗余的实时调用。\n"
+    "- 当工具能提高正确性或基底扎实度（有据可查）时，我便使用它们，并持续使用直到验证无误。\n"
+    "- 对于实时数学/哈希、当前环境状态（时间/系统/文件/git）或外部事实，我使用相应的工具而非凭记忆猜测。\n"
+    "- 如果默认的理解显而易见，我立即行动而非询问。\n"
+    "- 我绝不跳过前置的探索发现与依赖解决步骤。\n"
+    "- 如果可以检索到缺失的上下文，我会去获取它。只有当工具无法填补该鸿沟时，我才提出询问。\n"
+    "- 在结束之前，我验证需求、基底扎实度、格式以及副作用的范围。\n"
+    "- 在所有检查通过之前，我绝不宣告完成。"
 )
 
 # Gemini/Gemma-specific operational guidance, adapted from OpenCode's gemini.txt.
@@ -377,6 +335,7 @@ OPENAI_MODEL_EXECUTION_GUIDANCE = (
 GOOGLE_MODEL_OPERATIONAL_GUIDANCE = (
     "# Google model operational directives\n"
     "Follow these operational rules strictly:\n"
+    "- 在开始处理请求前，如果长期记忆可能提供答案、约束或背景，我会先检索 mem012；只采用与当前请求直接相关且可信的内容。\n"
     "- **Absolute paths:** Always construct and use absolute file paths for all "
     "file system operations. Combine the project root with relative paths.\n"
     "- **Verify first:** Use read_file/search_files to check file contents and "
@@ -891,7 +850,7 @@ CONTEXT_TRUNCATE_TAIL_RATIO = 0.2
 _SKILLS_PROMPT_CACHE_MAX = 8
 _SKILLS_PROMPT_CACHE: OrderedDict[tuple, str] = OrderedDict()
 _SKILLS_PROMPT_CACHE_LOCK = threading.Lock()
-_SKILLS_SNAPSHOT_VERSION = 1
+_SKILLS_SNAPSHOT_VERSION = 2
 
 
 def _skills_prompt_snapshot_path() -> Path:
@@ -984,6 +943,7 @@ def _build_snapshot_entry(
         "category": category,
         "frontmatter_name": str(frontmatter.get("name", skill_name)),
         "description": description,
+        "path": str(skill_file.parent),
         "platforms": [str(p).strip() for p in platforms if str(p).strip()],
         "conditions": extract_skill_conditions(frontmatter),
     }
@@ -1050,6 +1010,15 @@ def _skill_should_show(
     return True
 
 
+def _write_skills_xml_index(content: str) -> None:
+    try:
+        path = get_hermes_home() / "skills.xml"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    except Exception as e:
+        logger.debug("Could not write skills XML index: %s", e)
+
+
 def build_skills_system_prompt(
     available_tools: "set[str] | None" = None,
     available_toolsets: "set[str] | None" = None,
@@ -1072,6 +1041,7 @@ def build_skills_system_prompt(
     external_dirs = get_all_skills_dirs()[1:]  # skip local (index 0)
 
     if not skills_dir.exists() and not external_dirs:
+        _write_skills_xml_index("<skills>\n</skills>\n")
         return ""
 
     # ── Layer 1: in-process LRU cache ─────────────────────────────────
@@ -1096,12 +1066,13 @@ def build_skills_system_prompt(
         cached = _SKILLS_PROMPT_CACHE.get(cache_key)
         if cached is not None:
             _SKILLS_PROMPT_CACHE.move_to_end(cache_key)
-            return cached
+            _write_skills_xml_index(cached)
+            return ""
 
     # ── Layer 2: disk snapshot ────────────────────────────────────────
     snapshot = _load_skills_snapshot(skills_dir)
 
-    skills_by_category: dict[str, list[tuple[str, str]]] = {}
+    skills_by_category: dict[str, list[tuple[str, str, str]]] = {}
     category_descriptions: dict[str, str] = {}
 
     if snapshot is not None:
@@ -1124,7 +1095,7 @@ def build_skills_system_prompt(
             ):
                 continue
             skills_by_category.setdefault(category, []).append(
-                (frontmatter_name, entry.get("description", ""))
+                (frontmatter_name, entry.get("description", ""), entry.get("path", ""))
             )
         category_descriptions = {
             str(k): str(v)
@@ -1149,7 +1120,7 @@ def build_skills_system_prompt(
             ):
                 continue
             skills_by_category.setdefault(entry["category"], []).append(
-                (entry["frontmatter_name"], entry["description"])
+                (entry["frontmatter_name"], entry["description"], entry["path"])
             )
 
         # Read category-level DESCRIPTION.md files
@@ -1179,7 +1150,7 @@ def build_skills_system_prompt(
     # precedence: we track seen names and skip duplicates from external dirs.
     seen_skill_names: set[str] = set()
     for cat_skills in skills_by_category.values():
-        for name, _desc in cat_skills:
+        for name, _desc, _path in cat_skills:
             seen_skill_names.add(name)
 
     for ext_dir in external_dirs:
@@ -1205,7 +1176,7 @@ def build_skills_system_prompt(
                     continue
                 seen_skill_names.add(frontmatter_name)
                 skills_by_category.setdefault(entry["category"], []).append(
-                    (frontmatter_name, entry["description"])
+                    (frontmatter_name, entry["description"], entry["path"])
                 )
             except Exception as e:
                 logger.debug("Error reading external skill %s: %s", skill_file, e)
@@ -1225,63 +1196,36 @@ def build_skills_system_prompt(
                 logger.debug("Could not read external skill description %s: %s", desc_file, e)
 
     if not skills_by_category:
-        result = ""
+        skills_xml = "<skills>\n</skills>\n"
     else:
-        index_lines = []
+        xml_lines = ["<skills>"]
         for category in sorted(skills_by_category.keys()):
-            cat_desc = category_descriptions.get(category, "")
-            if cat_desc:
-                index_lines.append(f"  {category}: {cat_desc}")
-            else:
-                index_lines.append(f"  {category}:")
             # Deduplicate and sort skills within each category
             seen = set()
-            for name, desc in sorted(skills_by_category[category], key=lambda x: x[0]):
+            for name, desc, _path in sorted(skills_by_category[category], key=lambda x: x[0]):
                 if name in seen:
                     continue
                 seen.add(name)
-                if desc:
-                    index_lines.append(f"    - {name}: {desc}")
-                else:
-                    index_lines.append(f"    - {name}")
-
-        result = (
-            "## Skills (mandatory)\n"
-            "Before replying, scan the skills below. If a skill matches or is even partially relevant "
-            "to your task, you MUST load it with skill_view(name) and follow its instructions. "
-            "Err on the side of loading — it is always better to have context you don't need "
-            "than to miss critical steps, pitfalls, or established workflows. "
-            "Skills contain specialized knowledge — API endpoints, tool-specific commands, "
-            "and proven workflows that outperform general-purpose approaches. Load the skill "
-            "even if you think you could handle the task with basic tools like web_search or terminal. "
-            "Skills also encode the user's preferred approach, conventions, and quality standards "
-            "for tasks like code review, planning, and testing — load them even for tasks you "
-            "already know how to do, because the skill defines how it should be done here.\n"
-            "Whenever the user asks you to configure, set up, install, enable, disable, modify, "
-            "or troubleshoot Hermes Agent itself — its CLI, config, models, providers, tools, "
-            "skills, voice, gateway, plugins, or any feature — load the `hermes-agent` skill "
-            "first. It has the actual commands (e.g. `hermes config set …`, `hermes tools`, "
-            "`hermes setup`) so you don't have to guess or invent workarounds.\n"
-            "If a skill has issues, fix it with skill_manage(action='patch').\n"
-            "After difficult/iterative tasks, offer to save as a skill. "
-            "If a skill you loaded was missing steps, had wrong commands, or needed "
-            "pitfalls you discovered, update it before finishing.\n"
-            "\n"
-            "<available_skills>\n"
-            + "\n".join(index_lines) + "\n"
-            "</available_skills>\n"
-            "\n"
-            "Only proceed without loading a skill if genuinely none are relevant to the task."
-        )
+                xml_lines.extend([
+                    "  <skill>",
+                    f"    <name>{escape(str(name))}</name>",
+                    f"    <description>{escape(str(desc))}</description>",
+                    f"    <category>{escape(str(category))}</category>",
+                    f"    <path>{escape(str(_path))}</path>",
+                    "  </skill>",
+                ])
+        xml_lines.append("</skills>")
+        skills_xml = "\n".join(xml_lines) + "\n"
 
     # ── Store in LRU cache ────────────────────────────────────────────
     with _SKILLS_PROMPT_CACHE_LOCK:
-        _SKILLS_PROMPT_CACHE[cache_key] = result
+        _SKILLS_PROMPT_CACHE[cache_key] = skills_xml
         _SKILLS_PROMPT_CACHE.move_to_end(cache_key)
         while len(_SKILLS_PROMPT_CACHE) > _SKILLS_PROMPT_CACHE_MAX:
             _SKILLS_PROMPT_CACHE.popitem(last=False)
 
-    return result
+    _write_skills_xml_index(skills_xml)
+    return ""
 
 
 def build_nous_subscription_prompt(valid_tool_names: "set[str] | None" = None) -> str:

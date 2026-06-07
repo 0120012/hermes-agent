@@ -11,6 +11,7 @@ from agent.prompt_builder import (
     _scan_context_content,
     _truncate_content,
     _parse_skill_file,
+    _build_snapshot_entry,
     _skill_should_show,
     _find_hermes_md,
     _find_git_root,
@@ -25,6 +26,7 @@ from agent.prompt_builder import (
     OPENAI_MODEL_EXECUTION_GUIDANCE,
     MEMORY_GUIDANCE,
     SESSION_SEARCH_GUIDANCE,
+    SKILLS_GUIDANCE,
     PLATFORM_HINTS,
     WSL_ENVIRONMENT_HINT,
 )
@@ -47,6 +49,10 @@ class TestGuidanceConstants:
     def test_session_search_guidance_is_simple_cross_session_recall(self):
         assert "relevant cross-session context exists" in SESSION_SEARCH_GUIDANCE
         assert "recent turns of the current session" not in SESSION_SEARCH_GUIDANCE
+
+    def test_skills_guidance_requires_approval_before_create(self):
+        assert "Before creating a new skill" in SKILLS_GUIDANCE
+        assert "explicit user approval" in SKILLS_GUIDANCE
 
 
 # =========================================================================
@@ -214,6 +220,22 @@ class TestParseSkillFile:
         _, frontmatter, _ = _parse_skill_file(skill_file)
         assert frontmatter["prerequisites"]["env_vars"] == ["NONEXISTENT_KEY_ABC"]
 
+    def test_snapshot_entry_records_skill_directory_path(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "memory" / "mem012"
+        skill_dir.mkdir(parents=True)
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text("---\nname: mem012\ndescription: Memory CLI\n---\n")
+
+        entry = _build_snapshot_entry(
+            skill_file,
+            skills_dir,
+            {"name": "mem012"},
+            "Memory CLI",
+        )
+
+        assert entry["path"] == str(skill_dir)
+
 
 class TestPromptBuilderImports:
     def test_module_import_does_not_eagerly_import_skills_tool(self, monkeypatch):
@@ -252,6 +274,7 @@ class TestBuildSkillsSystemPrompt:
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         result = build_skills_system_prompt()
         assert result == ""
+        assert (tmp_path / "skills.xml").read_text(encoding="utf-8") == "<skills>\n</skills>\n"
 
     def test_builds_index_with_skills(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -261,9 +284,30 @@ class TestBuildSkillsSystemPrompt:
             "---\nname: python-debug\ndescription: Debug Python scripts\n---\n"
         )
         result = build_skills_system_prompt()
-        assert "python-debug" in result
-        assert "Debug Python scripts" in result
-        assert "available_skills" in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<skills>" in skills_xml
+        assert "<name>python-debug</name>" in skills_xml
+        assert "<description>Debug Python scripts</description>" in skills_xml
+        assert "<category>coding</category>" in skills_xml
+        assert f"<path>{skills_dir}</path>" in skills_xml
+
+    def test_cache_hit_refreshes_skills_xml(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        skills_dir = tmp_path / "skills" / "coding" / "python-debug"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "SKILL.md").write_text(
+            "---\nname: python-debug\ndescription: Debug Python scripts\n---\n"
+        )
+
+        first = build_skills_system_prompt()
+        skills_xml = tmp_path / "skills.xml"
+        first_xml = skills_xml.read_text(encoding="utf-8")
+        skills_xml.unlink(missing_ok=True)
+        second = build_skills_system_prompt()
+
+        assert second == first
+        assert skills_xml.read_text(encoding="utf-8") == first_xml
 
     def test_deduplicates_skills(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -273,8 +317,10 @@ class TestBuildSkillsSystemPrompt:
             d.mkdir(parents=True, exist_ok=True)
             (d / "SKILL.md").write_text("---\ndescription: Search stuff\n---\n")
         result = build_skills_system_prompt()
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
         # "search" should appear only once per category
-        assert result.count("- search") == 1
+        assert skills_xml.count("<name>search</name>") == 1
 
     def test_excludes_incompatible_platform_skills(self, monkeypatch, tmp_path):
         """Skills with platforms: [macos] should not appear on Linux."""
@@ -302,8 +348,10 @@ class TestBuildSkillsSystemPrompt:
             mock_sys.platform = "linux"
             result = build_skills_system_prompt()
 
-        assert "web-search" in result
-        assert "imessage" not in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>web-search</name>" in skills_xml
+        assert "<name>imessage</name>" not in skills_xml
 
     def test_includes_matching_platform_skills(self, monkeypatch, tmp_path):
         """Skills with platforms: [macos] should appear on macOS."""
@@ -321,8 +369,10 @@ class TestBuildSkillsSystemPrompt:
             mock_sys.platform = "darwin"
             result = build_skills_system_prompt()
 
-        assert "imessage" in result
-        assert "Send iMessages" in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>imessage</name>" in skills_xml
+        assert "<description>Send iMessages</description>" in skills_xml
 
     def test_excludes_disabled_skills(self, monkeypatch, tmp_path):
         """Skills in the user's disabled list should not appear in the system prompt."""
@@ -350,8 +400,10 @@ class TestBuildSkillsSystemPrompt:
         ):
             result = build_skills_system_prompt()
 
-        assert "web-search" in result
-        assert "old-tool" not in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>web-search</name>" in skills_xml
+        assert "<name>old-tool</name>" not in skills_xml
 
     def test_rebuilds_prompt_when_disabled_skills_change(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -362,14 +414,16 @@ class TestBuildSkillsSystemPrompt:
         )
 
         first = build_skills_system_prompt()
-        assert "cached-skill" in first
+        assert first == ""
+        assert "<name>cached-skill</name>" in (tmp_path / "skills.xml").read_text(encoding="utf-8")
 
         (tmp_path / "config.yaml").write_text(
             "skills:\n  disabled: [cached-skill]\n"
         )
 
         second = build_skills_system_prompt()
-        assert "cached-skill" not in second
+        assert second == ""
+        assert "<name>cached-skill</name>" not in (tmp_path / "skills.xml").read_text(encoding="utf-8")
 
     def test_includes_setup_needed_skills(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -390,8 +444,10 @@ class TestBuildSkillsSystemPrompt:
         )
 
         result = build_skills_system_prompt()
-        assert "free-skill" in result
-        assert "gated-skill" in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>free-skill</name>" in skills_xml
+        assert "<name>gated-skill</name>" in skills_xml
 
     def test_includes_skills_with_met_prerequisites(self, monkeypatch, tmp_path):
         """Skills with satisfied prerequisites should appear normally."""
@@ -407,7 +463,8 @@ class TestBuildSkillsSystemPrompt:
         )
 
         result = build_skills_system_prompt()
-        assert "ready-skill" in result
+        assert result == ""
+        assert "<name>ready-skill</name>" in (tmp_path / "skills.xml").read_text(encoding="utf-8")
 
     def test_non_local_backend_keeps_skill_visible_without_probe(
         self, monkeypatch, tmp_path
@@ -425,7 +482,8 @@ class TestBuildSkillsSystemPrompt:
         )
 
         result = build_skills_system_prompt()
-        assert "backend-skill" in result
+        assert result == ""
+        assert "<name>backend-skill</name>" in (tmp_path / "skills.xml").read_text(encoding="utf-8")
 
 
 class TestBuildNousSubscriptionPrompt:
@@ -1100,7 +1158,9 @@ class TestBuildSkillsSystemPromptConditional:
             available_tools=set(),
             available_toolsets={"web"},
         )
-        assert "duckduckgo" not in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>duckduckgo</name>" not in skills_xml
 
     def test_fallback_skill_shown_when_primary_unavailable(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -1113,7 +1173,9 @@ class TestBuildSkillsSystemPromptConditional:
             available_tools=set(),
             available_toolsets=set(),
         )
-        assert "duckduckgo" in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>duckduckgo</name>" in skills_xml
 
     def test_requires_skill_hidden_when_toolset_missing(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -1126,7 +1188,9 @@ class TestBuildSkillsSystemPromptConditional:
             available_tools=set(),
             available_toolsets=set(),
         )
-        assert "openhue" not in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>openhue</name>" not in skills_xml
 
     def test_requires_skill_shown_when_toolset_available(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -1139,7 +1203,9 @@ class TestBuildSkillsSystemPromptConditional:
             available_tools=set(),
             available_toolsets={"terminal"},
         )
-        assert "openhue" in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>openhue</name>" in skills_xml
 
     def test_unconditional_skill_always_shown(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -1152,7 +1218,9 @@ class TestBuildSkillsSystemPromptConditional:
             available_tools=set(),
             available_toolsets=set(),
         )
-        assert "notes" in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>notes</name>" in skills_xml
 
     def test_no_args_shows_all_skills(self, monkeypatch, tmp_path):
         """Backward compat: calling with no args shows everything."""
@@ -1163,7 +1231,9 @@ class TestBuildSkillsSystemPromptConditional:
             "---\nname: duckduckgo\ndescription: Free web search\nmetadata:\n  hermes:\n    fallback_for_toolsets: [web]\n---\n"
         )
         result = build_skills_system_prompt()
-        assert "duckduckgo" in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>duckduckgo</name>" in skills_xml
 
     def test_null_metadata_does_not_crash(self, monkeypatch, tmp_path):
         """Regression: metadata key present but null should not AttributeError."""
@@ -1178,7 +1248,9 @@ class TestBuildSkillsSystemPromptConditional:
             available_tools=set(),
             available_toolsets=set(),
         )
-        assert "safe-skill" in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>safe-skill</name>" in skills_xml
 
     def test_null_hermes_under_metadata_does_not_crash(self, monkeypatch, tmp_path):
         """Regression: metadata.hermes present but null should not crash."""
@@ -1192,7 +1264,9 @@ class TestBuildSkillsSystemPromptConditional:
             available_tools=set(),
             available_toolsets=set(),
         )
-        assert "nested-null" in result
+        assert result == ""
+        skills_xml = (tmp_path / "skills.xml").read_text(encoding="utf-8")
+        assert "<name>nested-null</name>" in skills_xml
 
 
 # =========================================================================
@@ -1234,31 +1308,24 @@ class TestOpenAIModelExecutionGuidance:
     """Tests for GPT/Codex-specific execution discipline guidance."""
 
     def test_guidance_covers_tool_persistence(self):
-        text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()
-        assert "tool_persistence" in text
-        assert "retry" in text
-        assert "empty" in text or "partial" in text
+        assert "工具" in OPENAI_MODEL_EXECUTION_GUIDANCE
+        assert "持续使用直到验证无误" in OPENAI_MODEL_EXECUTION_GUIDANCE
 
     def test_guidance_covers_prerequisite_checks(self):
-        text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()
-        assert "prerequisite" in text
-        assert "dependency" in text
+        assert "前置" in OPENAI_MODEL_EXECUTION_GUIDANCE
+        assert "依赖" in OPENAI_MODEL_EXECUTION_GUIDANCE
 
     def test_guidance_covers_verification(self):
-        text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()
-        assert "verification" in text or "verify" in text
-        assert "correctness" in text
+        assert "验证" in OPENAI_MODEL_EXECUTION_GUIDANCE
+        assert "所有检查通过之前" in OPENAI_MODEL_EXECUTION_GUIDANCE
 
     def test_guidance_covers_missing_context(self):
-        text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()
-        assert "missing_context" in text or "missing context" in text
-        assert "hallucinate" in text or "guess" in text
+        assert "缺失的上下文" in OPENAI_MODEL_EXECUTION_GUIDANCE
+        assert "只有当工具无法填补" in OPENAI_MODEL_EXECUTION_GUIDANCE
 
-    def test_guidance_uses_xml_tags(self):
-        assert "<tool_persistence>" in OPENAI_MODEL_EXECUTION_GUIDANCE
-        assert "</tool_persistence>" in OPENAI_MODEL_EXECUTION_GUIDANCE
-        assert "<verification>" in OPENAI_MODEL_EXECUTION_GUIDANCE
-        assert "</verification>" in OPENAI_MODEL_EXECUTION_GUIDANCE
+    def test_guidance_covers_default_action(self):
+        assert "默认的理解显而易见" in OPENAI_MODEL_EXECUTION_GUIDANCE
+        assert "立即行动" in OPENAI_MODEL_EXECUTION_GUIDANCE
 
     def test_guidance_is_string(self):
         assert isinstance(OPENAI_MODEL_EXECUTION_GUIDANCE, str)
@@ -1268,5 +1335,3 @@ class TestOpenAIModelExecutionGuidance:
 # =========================================================================
 # Budget warning history stripping
 # =========================================================================
-
-
