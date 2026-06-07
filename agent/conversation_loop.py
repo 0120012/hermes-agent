@@ -56,7 +56,7 @@ from agent.prompt_caching import apply_anthropic_cache_control
 from agent.retry_utils import jittered_backoff
 from agent.trajectory import has_incomplete_scratchpad
 from agent.usage_pricing import estimate_usage_cost, normalize_usage
-from hermes_constants import PARTIAL_STREAM_STUB_ID
+from hermes_constants import PARTIAL_STREAM_STUB_ID, get_hermes_home
 from hermes_logging import set_session_context
 from tools.skill_provenance import set_current_write_origin
 from utils import base_url_host_matches, env_var_enabled
@@ -286,6 +286,19 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
     # First turn of a new session (or recovering from a broken stored
     # prompt) — build from scratch.
     agent._cached_system_prompt = agent._build_system_prompt(system_message)
+    # What：首轮构建后保存完整 system prompt 供本地调试核对。
+    # Why：首轮 prompt 最能暴露初始化问题，写到 Hermes home 可避免污染用户 cwd。
+    _prompt_debug_text = (
+        "===== INITIAL SYSTEM PROMPT BEGIN =====\n"
+        f"{agent._cached_system_prompt or ''}\n"
+        "===== INITIAL SYSTEM PROMPT END =====\n"
+    )
+    try:
+        _prompt_debug_path = get_hermes_home() / "agent_prompt" / "init.md"
+        _prompt_debug_path.parent.mkdir(parents=True, exist_ok=True)
+        _prompt_debug_path.write_text(_prompt_debug_text, encoding="utf-8")
+    except (OSError, ValueError):
+        pass
 
     # Plugin hook: on_session_start — fired once when a brand-new
     # session is created (not on continuation).  Plugins can use this
