@@ -121,7 +121,7 @@ def _strip_yaml_frontmatter(content: str) -> str:
 DEFAULT_AGENT_IDENTITY = (
     "mem012 是我的记忆系统。启动后，我必须先执行 shell 命令 "
     "`mem012 --profile {active_profile} init`，完整读取返回内容，"
-    "完成初始化后再继续处理用户请求。"
+    "完成初始化后再继续处理用户请求, 若遇到失败立即停止报告给用户。"
 )
 
 HERMES_AGENT_HELP_GUIDANCE = (

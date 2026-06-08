@@ -108,8 +108,8 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     stable_parts.append(DEFAULT_AGENT_IDENTITY.format(active_profile=active_profile))
     _soul_loaded = False
     if agent.load_soul_identity or not agent.skip_context_files:
-        _soul_content = _r.load_soul_md()
-        if _soul_content:
+        # _soul_content = _r.load_soul_md()
+        # if _soul_content:
     #         stable_parts.append(_soul_content)
             _soul_loaded = True
     #
