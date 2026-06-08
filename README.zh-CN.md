@@ -3,7 +3,7 @@
 ```shell
 uv sync --extra all --locked
 uv run hermes setup
-## bash setup-hermes.sh
+# bash setup-hermes.sh
 ```
 
 ## 多agent
