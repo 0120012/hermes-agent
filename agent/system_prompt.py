@@ -104,7 +104,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     stable_parts.append(
         "mem012 是我的记忆系统。启动后，我必须先执行 shell 命令 "
         f"`mem012 --profile {active_profile} init`，完整读取返回内容，"
-        "完成初始化后再继续处理用户请求。"
+        "完成初始化后再继续处理用户请求, 若遇到失败立即停止报告给用户。"
     )
 
     # Try SOUL.md as primary identity unless the caller explicitly skipped it.
@@ -112,9 +112,9 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # cwd project instructions disabled.
     _soul_loaded = False
     if agent.load_soul_identity or not agent.skip_context_files:
-        _soul_content = _r.load_soul_md()
-        if _soul_content:
-            stable_parts.append(_soul_content)
+        # _soul_content = _r.load_soul_md()
+        # if _soul_content:
+            # stable_parts.append(_soul_content)
             _soul_loaded = True
 
     if not _soul_loaded:
@@ -122,7 +122,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         stable_parts.append(DEFAULT_AGENT_IDENTITY)
 
     # Pointer to the hermes-agent skill + docs for user questions about Hermes itself.
-    stable_parts.append(HERMES_AGENT_HELP_GUIDANCE)
+    # stable_parts.append(HERMES_AGENT_HELP_GUIDANCE)
 
     # Universal task-completion / no-fabrication guidance.  Applied to ALL
     # models regardless of tool_use_enforcement gating — the failure modes
@@ -234,9 +234,9 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # Environment hints (WSL, Termux, etc.) — tell the agent about the
     # execution environment so it can translate paths and adapt behavior.
     # Stable for the lifetime of the process.
-    _env_hints = _r.build_environment_hints()
-    if _env_hints:
-        stable_parts.append(_env_hints)
+    # _env_hints = _r.build_environment_hints()
+    # if _env_hints:
+    #     stable_parts.append(_env_hints)
 
     # Local Python toolchain probe — names python/pip/uv/PEP-668 state when
     # something is non-default so the model can pick the right install
@@ -324,7 +324,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         timestamp_line += f"\nModel: {agent.model}"
     if agent.provider:
         timestamp_line += f"\nProvider: {agent.provider}"
-    volatile_parts.append(timestamp_line)
+    # volatile_parts.append(timestamp_line)
 
     return {
         "stable":   "\n\n".join(p.strip() for p in stable_parts   if p and p.strip()),
