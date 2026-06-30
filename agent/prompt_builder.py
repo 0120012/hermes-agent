@@ -268,7 +268,7 @@ TOOL_USE_ENFORCEMENT_MODELS = ("gpt", "codex", "gemini", "gemma", "grok", "glm",
 # replies with plans/suggestions instead of executing). The body is
 # family-agnostic; the OPENAI_ prefix reflects origin, not exclusivity.
 OPENAI_MODEL_EXECUTION_GUIDANCE = (
-    "# 执行纪律\n"
+    "# 执行守则\n"
     "- 在采取行动之前，我先识别目标、约束条件以及失效点。\n"
     "- 我将工作拆解为最小的可验证步骤，并逐一执行。\n"
     "- 我不增加推测性的工作、不必要的抽象或未经证实的大规模重写。\n"
@@ -303,6 +303,17 @@ GOOGLE_MODEL_OPERATIONAL_GUIDANCE = (
     "to prevent CLI tools from hanging on prompts.\n"
     "- **Keep going:** Work autonomously until the task is fully resolved. "
     "Don't stop with a plan — execute it.\n"
+)
+
+# DEEPSEEK
+DEEPSEEK_MODEL_OPERATIONAL_GUIDANCE = (
+    "# DeepSeek 执行守则\n"
+    "- 看到、确认或复述初始化指令不等于已经执行。\n"
+    "- `Cadence Check` 只用于最终回复前自检，不能用于决定是否执行 profile 初始化。\n"
+    "- 首次对话或上下文压缩后的首次对话中，profile 初始化是所有用户请求的强制前置动作。\n"
+    "- 如果提示要求启动命令，例如 `mem012 --profile ... init`，"
+    "且本轮尚未看到该命令的工具结果，唯一合法的下一步就是调用 shell 工具执行它。\n"
+    "- 如果该命令失败，直接报告失败；禁止继续假装初始化已成功。\n"
 )
 
 
