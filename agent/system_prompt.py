@@ -97,9 +97,9 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         )
     else:
         stable_parts.append(
-            f"我的profile: {active_profile}. 我的profile工作空间是: "
-            f"~/.hermes/profiles/{active_profile}/。除非用户明确要求，否则不得修改"
-            f"其他 Hermes profile 工作空间，包括 default profile 的 ~/.hermes/。"
+            f"## 我的profile: {active_profile}. \n"
+            f"我的profile工作空间是: ~/.hermes/profiles/{active_profile}/。除非用户明确要求，否则不得修改"
+            f"其他 Hermes profile 工作空间，包括 default profile 的 ~/.hermes/。\n"
         )
 
     # Try SOUL.md as primary identity unless the caller explicitly skipped it.
@@ -183,7 +183,8 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
             # Also applied to xAI Grok — same failure modes (claims completion
             # without tool calls, suggests workarounds instead of using
             # existing tools, replies with plans instead of executing).
-            if "gpt" in _model_lower or "codex" in _model_lower or "grok" in _model_lower:
+            #if "gpt" in _model_lower or "codex" in _model_lower or "grok" in _model_lower:
+            else:
                 stable_parts.append(OPENAI_MODEL_EXECUTION_GUIDANCE)
 
     has_skills_tools = any(name in agent.valid_tool_names for name in ['skills_list', 'skill_view', 'skill_manage'])
