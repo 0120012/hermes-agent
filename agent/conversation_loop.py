@@ -309,11 +309,6 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
         print(f"\n{_prompt_debug_text}")
     except (OSError, ValueError):
         pass
-    try:
-        Path("init.md").write_text(_prompt_debug_text, encoding="utf-8")
-    except (OSError, ValueError):
-        pass
-
     # Plugin hook: on_session_start — fired once when a brand-new
     # session is created (not on continuation).  Plugins can use this
     # to initialise session-scoped state (e.g. warm a memory cache).
