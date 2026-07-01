@@ -126,8 +126,8 @@ DEFAULT_AGENT_IDENTITY = (
 
 HERMES_AGENT_HELP_GUIDANCE = (
     "If the user asks about configuring, setting up, or using Hermes Agent "
-    "itself, load the `hermes-agent` skill with skill_view(name='hermes-agent') "
-    "before answering. Docs: https://hermes-agent.nousresearch.com/docs"
+    "itself, locate the relevant Hermes Agent skill from the skills index and "
+    "read the skill file directly before answering. Docs: https://hermes-agent.nousresearch.com/docs"
 )
 
 MEMORY_GUIDANCE = (
@@ -968,8 +968,8 @@ def build_skills_system_prompt(
         "# Skills 索引\n"
         f"可用 skills 已索引到 `~/.skills/{active_profile}/skills_list.xml`。"
         "不要完整读取或输出整个 XML。只有当任务可能需要某个 skill 时，才使用 `rg` "
-        "在该 XML 路径中窄范围搜索候选；选定候选后，再使用 `skill_view` "
-        "读取具体 skill 内容并应用。"
+        "在该 XML 路径中窄范围搜索候选；选定候选后，从候选条目的 `<path>` "
+        "定位 skill 目录，并按需直接读取对应的 `SKILL.md` 或相关文件。"
     )
 
     if not skills_dir.exists() and not external_dirs:

@@ -9,7 +9,7 @@ description: Analyze GitHub Trending commercial value.
 
 ### 目标
 
-从固定数据源拉取 GitHub Trending JSON，按指定分组读取仓库 README，上下文交给模型生成中文分析。SKILL中python程序只负责取数和读取 README；仓库说明翻译、作用详解、商业化机会、产品化切入点、增强开发路线、收益路径由模型完成，禁止程序写死分析结论。
+从固定数据源拉取 GitHub Trending JSON，只读取 `Trending` 分组仓库 README，上下文交给模型生成中文分析。SKILL中python程序只负责取数和读取 README；仓库说明翻译、作用详解、商业化机会、产品化切入点、增强开发路线、收益路径由模型完成，禁止程序写死分析结论。禁止输出、分析或写入非 `Trending` 分组内容。
 
 ### 数据源
 
@@ -39,7 +39,7 @@ https://blog.0120012.xyz/github_trending/llms.json
 关键词：github, trending
 ```
 
-归档正文最低结构：
+归档正文只写 `Trending` 分组和商业价值榜，最低结构：
 
 ```markdown
 节点日期：YYYY-MM-DD
@@ -50,12 +50,11 @@ https://blog.0120012.xyz/github_trending/llms.json
 ## Trending
 ...
 
-## 其他分组
-...
-
 ## 商业价值 TOP5
 ...
 ```
+
+最终频道消息必须发送到频道 `1497481717018005504`，不得发送到其他频道。
 
 频道正文最终只输出：
 
@@ -73,9 +72,9 @@ https://blog.0120012.xyz/github_trending/llms.json
 
 ### 统一输出格式
 
-所有分组标题统一使用二级标题，例如 `## Trending`、`## Rust`、`## Python`。
+唯一允许的仓库分组标题是 `## Trending`。
 
-所有仓库统一改写为：
+`Trending` 分组内仓库统一改写为：
 
 ```markdown
 **序号. [owner/repo](repo_url) - 🌟 star数 - 语言**
@@ -88,7 +87,7 @@ https://blog.0120012.xyz/github_trending/llms.json
 - 语言：`未知`
 - 仓库说明：`暂无仓库说明`
 
-`Trending` 分组额外追加：
+每个 `Trending` 条目额外追加：
 
 ```markdown
 - 作用详解：解决的问题：...；典型使用场景：...；目标用户：...
@@ -98,7 +97,7 @@ https://blog.0120012.xyz/github_trending/llms.json
 
 ### 商业价值 TOP5
 
-Trending分组项目需要创建一个商业价值榜，格式固定：
+从 `Trending` 分组项目中创建一个商业价值榜，格式固定：
 
 ```markdown
 ## 商业价值 TOP5
@@ -116,11 +115,13 @@ Trending分组项目需要创建一个商业价值榜，格式固定：
 以下任一成立，则本次失败：
 
 - 无法读取或解析 `llms.json`
-- 无法完成目标分组统一格式化
+- 无法完成 `Trending` 分组统一格式化
 - `Trending` 条目缺少中文仓库说明
 - `Trending` 条目缺少 `作用详解`
 - `作用详解` 未覆盖“问题 / 场景 / 用户”三项
 - `商业价值 TOP5` 缺少“商业化机会 / 产品化切入点 / 增强开发路线 / 收益路径 / 壁垒与风险 / 投入优先级”任一项
+- 输出、分析或归档非 `Trending` 分组内容
+- 最终频道消息未发送到频道 `1497481717018005504`
 - 输出大量保留源站原始三行结构
 - 日期字段缺失或解析失败但未明确写 `日期字段解析失败`
 
@@ -131,20 +132,17 @@ Trending分组项目需要创建一个商业价值榜，格式固定：
 ### 简洁说明
 
 - `fetch_llms_json.py`：拉取固定 `llms.json`，默认写入 `cache/github_trending/llms.json`；会明文输出每一步。
-- `gather_readmes.py`：一次传入一个 JSON 分组名，完整读取该分组仓库 README；`--max-bytes` 是单个 README 的字节上限，推荐 `120000`，`0` 表示不限制；结果写入 JSON 文件，`stdout` 返回 `README 上下文 JSON：绝对路径`，步骤输出到 `stderr`。
+- `gather_readmes.py`：本任务只允许传入 `Trending`，完整读取该分组仓库 README；`--max-bytes` 是单个 README 的字节上限，推荐 `120000`，`0` 表示不限制；结果写入 JSON 文件，`stdout` 返回 `README 上下文 JSON：绝对路径`，步骤输出到 `stderr`。
 - `read_raw_readme.py`：读取单个 README；输入可以是 raw URL，也可以是 GitHub 仓库根 URL；README 正文输出到 `stdout`，步骤输出到 `stderr`。
 
 ### 命令举例
 
 ```bash
-cd /Users/vw/git/trending
-
 # 1. 拉取固定数据源到本地缓存，默认写入 cache/github_trending/llms.json
 python3 fetch_llms_json.py
 
-# 2. 按单个分组读取 README 上下文；分组名来自 llms.json
+# 2. 只读取 Trending 分组 README 上下文
 python3 gather_readmes.py --max-bytes 12000 Trending
-python3 gather_readmes.py --max-bytes 12000 "C++"
 
 # 3. 读取单个 README：raw URL 或仓库根 URL 均可
 python3 read_raw_readme.py https://raw.githubusercontent.com/vcvvvc/CLAUDE.MD/refs/heads/main/CLAUDE_ZH.md
