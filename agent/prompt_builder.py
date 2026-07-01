@@ -924,7 +924,14 @@ def _skill_should_show(
 
 def _write_skills_xml_index(content: str) -> None:
     try:
-        path = get_hermes_home() / "skills.xml"
+        from agent.file_safety import _resolve_active_profile_name
+
+        active_profile = _resolve_active_profile_name()
+    except Exception:
+        active_profile = "default"
+
+    try:
+        path = Path("~/.skills").expanduser() / active_profile / "skills_list.xml"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
     except Exception as e:
@@ -951,10 +958,23 @@ def build_skills_system_prompt(
     """
     skills_dir = get_skills_dir()
     external_dirs = get_all_skills_dirs()[1:]  # skip local (index 0)
+    try:
+        from agent.file_safety import _resolve_active_profile_name
+
+        active_profile = _resolve_active_profile_name()
+    except Exception:
+        active_profile = "default"
+    skills_list_prompt = (
+        "# Skills 索引\n"
+        f"可用 skills 已索引到 `~/.skills/{active_profile}/skills_list.xml`。"
+        "不要完整读取或输出整个 XML。只有当任务可能需要某个 skill 时，才使用 `rg` "
+        "在该 XML 路径中窄范围搜索候选；选定候选后，再使用 `skill_view` "
+        "读取具体 skill 内容并应用。"
+    )
 
     if not skills_dir.exists() and not external_dirs:
         _write_skills_xml_index("<skills>\n</skills>\n")
-        return ""
+        return skills_list_prompt
 
     # ── Layer 1: in-process LRU cache ─────────────────────────────────
     # Include the resolved platform so per-platform disabled-skill lists
@@ -979,7 +999,7 @@ def build_skills_system_prompt(
         if cached is not None:
             _SKILLS_PROMPT_CACHE.move_to_end(cache_key)
             _write_skills_xml_index(cached)
-            return ""
+            return skills_list_prompt
 
     # ── Layer 2: disk snapshot ────────────────────────────────────────
     snapshot = _load_skills_snapshot(skills_dir)
@@ -1137,7 +1157,7 @@ def build_skills_system_prompt(
             _SKILLS_PROMPT_CACHE.popitem(last=False)
 
     _write_skills_xml_index(result)
-    return ""
+    return skills_list_prompt
 
 
 def build_nous_subscription_prompt(valid_tool_names: "set[str] | None" = None) -> str:
