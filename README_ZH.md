@@ -1,6 +1,17 @@
-## 快速安装
+## 编译安装
 
+```shell
+uv sync --extra all --locked
+uv run hermes setup
+# bash setup-hermes.sh
+```
 
+## 多agent
+
+```
+hermes profile create {profile_name}
+# hermes profile create coder
+```
 
 ## 上手指南
 
