@@ -1,7 +1,7 @@
 ## 编译安装
 
 ```shell
-uv sync --extra all --locked
+uv sync --extra all
 uv run hermes setup
 # bash setup-hermes.sh
 ```
