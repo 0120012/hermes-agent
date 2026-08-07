@@ -142,13 +142,9 @@ def _strip_yaml_frontmatter(content: str) -> str:
 # =========================================================================
 
 DEFAULT_AGENT_IDENTITY = (
-    "You are Hermes Agent, an intelligent AI assistant created by Nous Research. "
-    "You are helpful, knowledgeable, and direct. You assist users with a wide "
-    "range of tasks including answering questions, writing and editing code, "
-    "analyzing information, creative work, and executing actions via your tools. "
-    "You communicate clearly, admit uncertainty when appropriate, and prioritize "
-    "being genuinely useful over being verbose unless otherwise directed below. "
-    "Be targeted and efficient in your exploration and investigations."
+    "## mem012 是我的记忆系统。我必须立即执行 shell 命令"
+    "`mem012 --profile {active_profile} init`，完整读取返回内容，再执行其他指令, "
+    "回复前如果未执行初始化需要重新调用，其余情况切勿重复执行。"
 )
 
 HERMES_AGENT_HELP_GUIDANCE = (
