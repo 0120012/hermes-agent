@@ -561,6 +561,15 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
     # First turn of a new session (or recovering from a broken stored
     # prompt) — build from scratch.
     agent._cached_system_prompt = agent._build_system_prompt(system_message)
+    _prompt_debug_text = (
+        "===== INITIAL SYSTEM PROMPT BEGIN =====\n"
+        f"{agent._cached_system_prompt or ''}\n"
+        "===== INITIAL SYSTEM PROMPT END =====\n"
+    )
+    try:
+        print(f"\n{_prompt_debug_text}")
+    except (OSError, ValueError):
+        pass
 
     # Plugin hook: on_session_start — fired once when a brand-new
     # session is created (not on continuation).  Plugins can use this
