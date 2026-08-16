@@ -487,26 +487,26 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # ── Volatile tier (changes per session/turn — never cached) ───
     volatile_parts: List[str] = []
 
-    if agent._memory_store:
-        if agent._memory_enabled:
-            mem_block = agent._memory_store.format_for_system_prompt("memory")
-            if mem_block:
-                volatile_parts.append(mem_block)
-        # USER.md is always included when enabled.
-        if agent._user_profile_enabled:
-            user_block = agent._memory_store.format_for_system_prompt("user")
-            if user_block:
-                volatile_parts.append(user_block)
+    # if agent._memory_store:
+    #     if agent._memory_enabled:
+    #         mem_block = agent._memory_store.format_for_system_prompt("memory")
+    #         if mem_block:
+    #             volatile_parts.append(mem_block)
+    #     # USER.md is always included when enabled.
+    #     if agent._user_profile_enabled:
+    #         user_block = agent._memory_store.format_for_system_prompt("user")
+    #         if user_block:
+    #             volatile_parts.append(user_block)
 
     # External memory provider system prompt block (additive to built-in)
-    if agent._memory_manager:
-        try:
-            _ext_mem_block = agent._memory_manager.build_system_prompt()
-            if _ext_mem_block:
-                volatile_parts.append(_ext_mem_block)
-        except Exception:
-            pass
-
+    # if agent._memory_manager:
+    #     try:
+    #         _ext_mem_block = agent._memory_manager.build_system_prompt()
+    #         if _ext_mem_block:
+    #             volatile_parts.append(_ext_mem_block)
+    #     except Exception:
+    #         pass
+    #
     from hermes_time import now as _hermes_now
     now = _hermes_now()
     # Date-only (not minute-precision) so the system prompt is byte-stable
