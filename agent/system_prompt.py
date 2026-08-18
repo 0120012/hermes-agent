@@ -372,25 +372,17 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # ── Stable tier ────────────────────────────────────────────────
     stable_parts: List[str] = []
 
-    # Try SOUL.md as primary identity unless the caller explicitly skipped it.
-    # Some execution modes (cron) still want HERMES_HOME persona while keeping
-    # cwd project instructions disabled.
-    _soul_loaded = False
-    if agent.load_soul_identity or not agent.skip_context_files:
-        # Scope the SOUL.md read to the agent's OWN home (see _agent_home) —
-        # ambient resolution on a thread that lost the HERMES_HOME ContextVar
-        # reads the launch profile's SOUL.md instead (#50233).
-        _soul_content = _r.load_soul_md(_ctx_len, home_override=_agent_home(agent))
-        if _soul_content:
-            stable_parts.append(_soul_content)
-            _soul_loaded = True
+    _soul_loaded = True
+    # if agent.load_soul_identity or not agent.skip_context_files:
+    #     _soul_content = _r.load_soul_md(_ctx_len)
+    #     if _soul_content:
+    #         stable_parts.append(_soul_content)
+    #         _soul_loaded = True
 
-    if not _soul_loaded:
-        # Fallback to hardcoded identity
-        stable_parts.append(DEFAULT_AGENT_IDENTITY)
+    stable_parts.append(DEFAULT_AGENT_IDENTITY)
 
     # Pointer to the hermes-agent skill + docs for user questions about Hermes itself.
-    stable_parts.append(HERMES_AGENT_HELP_GUIDANCE)
+    # stable_parts.append(HERMES_AGENT_HELP_GUIDANCE)
 
     # Universal task-completion / no-fabrication guidance.  Applied to ALL
     # models regardless of tool_use_enforcement gating — the failure modes
@@ -437,14 +429,6 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # agent has tools. Static text → byte-stable prompt (no cache hit).
     if agent.valid_tool_names:
         stable_parts.append(STEER_CHANNEL_NOTE)
-
-    # Computer-use — goes in as its own block rather than being merged into
-    # tool_guidance because the content is multi-paragraph. The guidance is
-    # rendered for the host platform so Windows/Linux hosts don't see
-    # macOS-only wording (Mac, Space, cmd+s).
-    if "computer_use" in agent.valid_tool_names:
-        from agent.prompt_builder import computer_use_guidance
-        stable_parts.append(computer_use_guidance())
 
     nous_subscription_prompt = _r.build_nous_subscription_prompt(agent.valid_tool_names)
     if nous_subscription_prompt:
@@ -656,34 +640,16 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     else:
         _home_str = _root_str = str(get_hermes_home())
     if active_profile == "default":
-        post_workspace_parts.append(
-            "Active Hermes profile: default. Other profiles (if any) live "
-            "under " + _root_str + "/profiles/<name>/. Each profile has its own "
-            "skills/, plugins/, cron/, and memories/ that affect a different "
-            "session than this one. Do not modify another profile's "
-            "skills/plugins/cron/memories unless the user explicitly directs "
-            "you to."
+        stable_parts.append(
+            "my profile: hermes. 我的 Hermes profile 工作空间是 " + _root_str + "/。"
+            "除非用户明确要求，否则不得修改其他 Hermes profile 工作空间"
+            "（" + _root_str + "/profiles/<name>/）。"
         )
     else:
-        # A non-default name is only ever returned when the resolved home is
-        # ALREADY <root>/profiles/<name> — that is exactly how both
-        # _profile_name_for_home() and _resolve_active_profile_name() derive
-        # it. So the profile home is the session home itself; appending
-        # /profiles/<name> again doubled it (#72894). The default profile's
-        # data sits at the ROOT (get_default_hermes_root()), which in ambient
-        # profile mode is NOT get_hermes_home().
-        profile_home = _home_str
-        default_root = get_default_hermes_root()
-        post_workspace_parts.append(
-            f"Active Hermes profile: {active_profile}. This session reads "
-            f"and writes {profile_home}/. The default "
-            f"profile's data lives at {default_root}/skills/, {default_root}/plugins/, "
-            f"{default_root}/cron/, {default_root}/memories/ — those belong to a "
-            f"different session run from a different shell. Do NOT modify "
-            f"another profile's skills/plugins/cron/memories unless the user "
-            f"explicitly directs you to. The cross-profile write guard will "
-            f"refuse such writes by default; pass cross_profile=True only "
-            f"after explicit direction."
+        stable_parts.append(
+            f"## 我的profile: {active_profile}. \n"
+            f"我的profile工作空间是: {_home_str}/。除非用户明确要求，否则不得修改"
+            f"其他 Hermes profile 工作空间，包括 default profile 的 {_root_str}/。\n"
         )
 
     platform_key = (agent.platform or "").lower().strip()
@@ -779,25 +745,26 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     if skills_prompt:
         volatile_parts.append(skills_prompt)
 
-    if agent._memory_store:
-        if agent._memory_enabled:
-            mem_block = agent._memory_store.format_for_system_prompt("memory")
-            if mem_block:
-                volatile_parts.append(mem_block)
-        # USER.md is always included when enabled.
-        if agent._user_profile_enabled:
-            user_block = agent._memory_store.format_for_system_prompt("user")
-            if user_block:
-                volatile_parts.append(user_block)
+    # if agent._memory_store:
+    #     if agent._memory_enabled:
+    #         mem_block = agent._memory_store.format_for_system_prompt("memory")
+    #         if mem_block:
+    #             volatile_parts.append(mem_block)
+    #     # USER.md is always included when enabled.
+    #     if agent._user_profile_enabled:
+    #         user_block = agent._memory_store.format_for_system_prompt("user")
+    #         if user_block:
+    #             volatile_parts.append(user_block)
 
     # External memory provider system prompt block (additive to built-in)
-    if agent._memory_manager:
-        try:
-            _ext_mem_block = agent._memory_manager.build_system_prompt()
-            if _ext_mem_block:
-                volatile_parts.append(_ext_mem_block)
-        except Exception:
-            pass
+    # if agent._memory_manager:
+    #     try:
+    #         _ext_mem_block = agent._memory_manager.build_system_prompt()
+    #         if _ext_mem_block:
+    #             volatile_parts.append(_ext_mem_block)
+    #     except Exception:
+    #         pass
+    #
 
     # Plugin sections are intentionally confined to one coarse anchor in the
     # volatile tail. This preserves deterministic ordering and lets a resumed
