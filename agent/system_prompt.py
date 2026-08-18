@@ -640,13 +640,15 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     else:
         _home_str = _root_str = str(get_hermes_home())
     if active_profile == "default":
-        stable_parts.append(
+        stable_parts.insert(
+            0,
             "my profile: hermes. 我的 Hermes profile 工作空间是 " + _root_str + "/。"
             "除非用户明确要求，否则不得修改其他 Hermes profile 工作空间"
             "（" + _root_str + "/profiles/<name>/）。"
         )
     else:
-        stable_parts.append(
+        stable_parts.insert(
+            0,
             f"## 我的profile: {active_profile}. \n"
             f"我的profile工作空间是: {_home_str}/。除非用户明确要求，否则不得修改"
             f"其他 Hermes profile 工作空间，包括 default profile 的 {_root_str}/。\n"
