@@ -843,16 +843,16 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
     # persisted over the pin below. Pinned first, so the prompt describes the tools sent.
     built_for_this_surface = _restore_pinned_tools(agent, session_row)
     agent._cached_system_prompt = agent._build_system_prompt(system_message)
-    _prompt_debug_text = (
-        "===== INITIAL SYSTEM PROMPT BEGIN =====\n"
-        f"{agent._cached_system_prompt or ''}\n"
-        "===== INITIAL SYSTEM PROMPT END =====\n"
-    )
-    try:
-        with open("/root/git/hermes-agent/prompt-log.md", "a", encoding="utf-8") as _prompt_log:
-            _prompt_log.write(_prompt_debug_text + "\n")
-    except OSError:
-        pass
+    # _prompt_debug_text = (
+    #     "===== INITIAL SYSTEM PROMPT BEGIN =====\n"
+    #     f"{agent._cached_system_prompt or ''}\n"
+    #     "===== INITIAL SYSTEM PROMPT END =====\n"
+    # )
+    # try:
+    #     with open("/root/git/hermes-agent/prompt-log.md", "a", encoding="utf-8") as _prompt_log:
+    #         _prompt_log.write(_prompt_debug_text + "\n")
+    # except OSError:
+    #     pass
     if conversation_history:
         record_prompt_rebuild(agent, stored_prompt, stored_state, agent._cached_system_prompt)
 
