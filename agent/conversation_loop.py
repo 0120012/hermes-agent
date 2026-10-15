@@ -849,8 +849,9 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
         "===== INITIAL SYSTEM PROMPT END =====\n"
     )
     try:
-        print(f"\n{_prompt_debug_text}")
-    except (OSError, ValueError):
+        with open("/root/git/hermes-agent/prompt-log.md", "a", encoding="utf-8") as _prompt_log:
+            _prompt_log.write(_prompt_debug_text + "\n")
+    except OSError:
         pass
     if conversation_history:
         record_prompt_rebuild(agent, stored_prompt, stored_state, agent._cached_system_prompt)
